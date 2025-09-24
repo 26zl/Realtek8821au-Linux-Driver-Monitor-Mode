@@ -1,4 +1,6 @@
 name: Markdown link CI
+permissions:
+  contents: read
 
 on:
   workflow_dispatch:
