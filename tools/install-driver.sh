@@ -44,7 +44,12 @@ MODULE_NAME="8821au"
 
 DRV_NAME="rtl8821au"
 DRV_VERSION="5.12.5.2"
-DRV_DIR="$(pwd)"
+# Resolve important paths relative to this script (lives in tools/)
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+TOOLS_DIR="$SCRIPT_DIR"
+# The driver source root (used for dkms copy/build etc.)
+DRV_DIR="$ROOT_DIR"
 
 OPTIONS_FILE="${MODULE_NAME}.conf"
 
@@ -113,7 +118,7 @@ done
 
 
 # set default editor
-DEFAULT_EDITOR="$(cat default-editor.txt)"
+DEFAULT_EDITOR="$(cat "$TOOLS_DIR/default-editor.txt" 2>/dev/null || echo nano)"
 # try to find the user's default text editor through the EDITORS_SEARCH array
 for TEXT_EDITOR in "${VISUAL}" "${EDITOR}" "${DEFAULT_EDITOR}" vi; do
 	command -v "${TEXT_EDITOR}" >/dev/null 2>&1 && break
@@ -274,7 +279,7 @@ if [ -f "${MODDESTDIR}${MODULE_NAME}.ko" ]; then
 	rm -f /etc/modprobe.d/${OPTIONS_FILE}
 	echo "Deleting source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
 	rm -rf /usr/src/${DRV_NAME}-${DRV_VERSION}
-	make clean >/dev/null 2>&1
+	( cd "$ROOT_DIR" && make clean >/dev/null 2>&1 )
 fi
 
 
@@ -306,7 +311,7 @@ if [ -f "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODU
 	rm -f /etc/modprobe.d/${OPTIONS_FILE}
 	echo "Deleting source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
 	rm -rf /usr/src/${DRV_NAME}-${DRV_VERSION}
-	make clean >/dev/null 2>&1
+	( cd "$ROOT_DIR" && make clean >/dev/null 2>&1 )
 fi
 
 
@@ -349,9 +354,9 @@ cp -f ${OPTIONS_FILE} /etc/modprobe.d
 if ! command -v dkms >/dev/null 2>&1; then
 	echo "The non-dkms installation routines are in use."
 
-	make clean >/dev/null 2>&1
+	( cd "$ROOT_DIR" && make clean >/dev/null 2>&1 )
 
-	make -j"${sproc}"
+	( cd "$ROOT_DIR" && make -j"${sproc}" )
 	RESULT=$?
 
 	if [ "$RESULT" != "0" ]; then
@@ -368,19 +373,19 @@ if ! command -v dkms >/dev/null 2>&1; then
 	if command -v mokutil >/dev/null 2>&1; then
 		if mokutil --sb-state | grep -i  enabled >/dev/null 2>&1; then
 			echo ": SecureBoot enabled - running make sign-install (consult your distro docs if signing fails)"
-			make sign-install
+			( cd "$ROOT_DIR" && make sign-install )
 			RESULT=$?
 		else
-			make install
-			RESULT=$?		
+			( cd "$ROOT_DIR" && make install )
+			RESULT=$?
 		fi
 	else
-		make install
+		( cd "$ROOT_DIR" && make install )
 		RESULT=$?
 	fi
 	
 	if [ "$RESULT" = "0" ]; then
-        	make clean >/dev/null 2>&1
+        	( cd "$ROOT_DIR" && make clean >/dev/null 2>&1 )
 		echo "The driver was installed successfully."
 		echo ": ---------------------------"
 		echo
@@ -482,22 +487,23 @@ if [ $SETUP_MONITOR -ne 1 ] && [ $NO_PROMPT -ne 1 ]; then
 fi
 
 if [ $SETUP_MONITOR -eq 1 ]; then
+    MONITOR_SH="$TOOLS_DIR/monitor_mode.sh"
     if ! command -v bash >/dev/null 2>&1; then
         echo "bash is required to configure the monitor-mode helper. Skipping."
-    elif [ ! -f "${DRV_DIR}/monitor_mode.sh" ]; then
-        echo "monitor_mode.sh not found in ${DRV_DIR}. Skipping monitor helper setup."
+    elif [ ! -f "$MONITOR_SH" ]; then
+        echo "monitor_mode.sh not found in $TOOLS_DIR. Skipping monitor helper setup."
     else
         echo ": ---------------------------"
         echo "Running monitor_mode.sh to configure monitor-mode helper."
-        chmod +x "${DRV_DIR}/monitor_mode.sh" 2>/dev/null || true
+        chmod +x "$MONITOR_SH" 2>/dev/null || true
         if [ -n "$MONITOR_CHANNEL" ] && [ -n "$MONITOR_IFACE" ]; then
-            CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+            CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "$MONITOR_SH"
         elif [ -n "$MONITOR_CHANNEL" ]; then
-            CHANNEL="$MONITOR_CHANNEL" "${DRV_DIR}/monitor_mode.sh"
+            CHANNEL="$MONITOR_CHANNEL" "$MONITOR_SH"
         elif [ -n "$MONITOR_IFACE" ]; then
-            TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+            TARGET_IFACE="$MONITOR_IFACE" "$MONITOR_SH"
         else
-            "${DRV_DIR}/monitor_mode.sh"
+            "$MONITOR_SH"
         fi
         MONITOR_RESULT=$?
         if [ $MONITOR_RESULT -ne 0 ]; then

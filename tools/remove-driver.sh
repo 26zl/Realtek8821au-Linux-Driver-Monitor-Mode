@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 
 # Purpose: Remove Realtek out-of-kernel USB WiFi adapter drivers and
 #          clean up the optional monitor-mode helper.
@@ -29,7 +30,7 @@
 # GNU General Public License for more details.
 
 SCRIPT_NAME="remove-driver.sh"
-SCRIPT_VERSION="20240314"
+SCRIPT_VERSION="20241004"
 
 MODULE_NAME="8821au"
 
@@ -42,6 +43,14 @@ KARCH="$(uname -m)"
 KVER="$(uname -r)"
 
 MODDESTDIR="/lib/modules/${KVER}/kernel/drivers/net/wireless/"
+
+depmod_wrap() {
+    if [ -x /sbin/depmod ]; then
+        /sbin/depmod -a "${KVER}"
+    else
+        depmod -a "${KVER}" 2>/dev/null || true
+    fi
+}
 
 SERVICE="wlan-monitor-8821au.service"
 HELPER="/usr/local/bin/wlan-monitor-8821au.sh"
@@ -95,6 +104,7 @@ remove_monitor_helper() {
 	if command_exists systemctl; then
 		systemctl daemon-reload 2>/dev/null || true
 	fi
+	rm -f "/etc/systemd/system/multi-user.target.wants/${SERVICE}" 2>/dev/null || true
 
 	iface="$TARGET_IFACE"
 	if [ -z "$iface" ]; then
@@ -113,10 +123,13 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 print_usage() {
-	echo "Syntax $0 [NoPrompt] [TARGET_IFACE=name]"
-	echo "       NoPrompt       - noninteractive mode"
-	echo "       TARGET_IFACE=x - interface to hand back to NetworkManager"
-	echo "       -h|--help       - Show help"
+	echo "Syntax: $0 [NoPrompt] [TARGET_IFACE=name]"
+	echo "  NoPrompt         - run without interactive prompts"
+	echo "  TARGET_IFACE=x   - interface to hand back to NetworkManager"
+	echo "  -h|--help        - show help"
+	echo "Examples:"
+	echo "  sudo $0 NoPrompt"
+	echo "  sudo $0 TARGET_IFACE=wlan1"
 }
 
 NO_PROMPT=0
@@ -155,22 +168,27 @@ echo ": ${KVER} (kernel version)"
 echo ": ---------------------------"
 echo
 
+# Try to unload the kernel module if it is currently loaded
+if lsmod | awk '{print $1}' | grep -q "^${MODULE_NAME}$"; then
+    modprobe -r "${MODULE_NAME}" 2>/dev/null || rmmod "${MODULE_NAME}" 2>/dev/null || true
+fi
+
 if [ -f "${MODDESTDIR}${MODULE_NAME}.ko" ]; then
 	echo "Removing a non-dkms installation: ${MODDESTDIR}${MODULE_NAME}.ko"
 	rm -f "${MODDESTDIR}${MODULE_NAME}.ko"
-	/sbin/depmod -a "${KVER}"
+	depmod_wrap
 fi
 
 if [ -f "${MODDESTDIR}rtl${MODULE_NAME}.ko" ]; then
 	echo "Removing a non-dkms installation: ${MODDESTDIR}rtl${MODULE_NAME}.ko"
 	rm -f "${MODDESTDIR}rtl${MODULE_NAME}.ko"
-	/sbin/depmod -a "${KVER}"
+	depmod_wrap
 fi
 
 if [ -f "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz" ]; then
 	echo "Removing a non-dkms installation: /usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz"
 	rm -f "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz"
-	/sbin/depmod -a "${KVER}"
+	depmod_wrap
 fi
 
 if command_exists dkms; then

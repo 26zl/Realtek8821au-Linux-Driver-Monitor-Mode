@@ -28,4 +28,4 @@ Monitor mode enables passive capture of wireless traffic. It is essential to use
 
 - **Android Cross-Compilation Support**: Adapting the driver build system to compile for Android kernels and architectures
 
-For more about the driver, check out the upstream readme.
+For more about the driver, installation etc. Check out the upstream readme.
