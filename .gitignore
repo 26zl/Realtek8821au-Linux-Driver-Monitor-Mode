@@ -5,3 +5,27 @@ Module.symvers
 *.mod
 *.mod.c
 *.o
+
+# Build artifacts
+*.a
+*.so
+*.so.*
+*.d
+
+# Backup and swap files
+*~
+*.swp
+
+# Logs
+*.log
+
+# Output directories
+/build/
+.out/
+.tmp/
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/

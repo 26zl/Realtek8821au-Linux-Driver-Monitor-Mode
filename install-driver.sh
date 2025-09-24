@@ -25,7 +25,6 @@
 #
 # To check for errors and to check that this script does not require bash:
 #
-# $ shellcheck remove-driver.sh
 #
 # Copyright(c) 2024 Nick Morrow
 #
@@ -76,21 +75,40 @@ fi
 
 
 # support for the NoPrompt option allows non-interactive use of this script
+print_usage() {
+    echo "Syntax $0 [NoPrompt] [Monitor] [TARGET_IFACE=name] [CHANNEL=n]"
+    echo "       NoPrompt       - noninteractive mode"
+    echo "       Monitor        - configure monitor-mode helper after install"
+    echo "       TARGET_IFACE=x - override interface passed to monitor helper"
+    echo "       CHANNEL=n       - default channel passed to monitor helper"
+    echo "       -h|--help       - Show help"
+}
+
 NO_PROMPT=0
+SETUP_MONITOR=0
+MONITOR_IFACE=""
+MONITOR_CHANNEL=""
 # get the script options
 while [ $# -gt 0 ]
 do
-	case $1 in
-		NoPrompt)
-			NO_PROMPT=1 ;;
-		*h|*help|*)
-			echo "Syntax $0 <NoPrompt>"
-			echo "       NoPrompt - noninteractive mode"
-			echo "       -h|--help - Show help"
-			exit 1
-			;;
-	esac
-	shift
+    case $1 in
+        NoPrompt|noprompt|NOPROMPT)
+            NO_PROMPT=1 ;;
+        Monitor|MonitorMode|monitor|MONITOR)
+            SETUP_MONITOR=1 ;;
+        TARGET_IFACE=*|TargetIface=*|target_iface=*)
+            MONITOR_IFACE=${1#*=} ;;
+        CHANNEL=*|Channel=*|channel=*)
+            MONITOR_CHANNEL=${1#*=} ;;
+        -h|--help|help|-help)
+            print_usage
+            exit 0 ;;
+        *)
+            echo "Unknown option: $1"
+            print_usage
+            exit 1 ;;
+    esac
+    shift
 done
 
 
@@ -303,6 +321,7 @@ if command -v dkms >/dev/null 2>&1; then
 				echo "Removing a driver that was installed by dkms."
 				dkms remove -m "${drvname}" -v "${drvver}" -k "${kerver}" -c "/usr/src/${drvname}-${drvver}/dkms.conf"
 			fi
+			;;
 		esac
 	done
 	if [ -f /etc/modprobe.d/${OPTIONS_FILE} ]; then
@@ -348,7 +367,7 @@ if ! command -v dkms >/dev/null 2>&1; then
 #	if secure boot is active, use sign-install
 	if command -v mokutil >/dev/null 2>&1; then
 		if mokutil --sb-state | grep -i  enabled >/dev/null 2>&1; then
-			echo ": SecureBoot enabled - read FAQ about SecureBoot"
+			echo ": SecureBoot enabled - running make sign-install (consult your distro docs if signing fails)"
 			make sign-install
 			RESULT=$?
 		else
@@ -452,6 +471,42 @@ else
 	fi
 fi
 
+# optional monitor-mode configuration
+if [ $SETUP_MONITOR -ne 1 ] && [ $NO_PROMPT -ne 1 ]; then
+    printf "Do you want to configure the monitor-mode helper now? [y/N] "
+    read -r monitor_reply
+    case "$monitor_reply" in
+        [yY][eE][sS]|[yY])
+            SETUP_MONITOR=1 ;;
+    esac
+fi
+
+if [ $SETUP_MONITOR -eq 1 ]; then
+    if ! command -v bash >/dev/null 2>&1; then
+        echo "bash is required to configure the monitor-mode helper. Skipping."
+    elif [ ! -f "${DRV_DIR}/monitor_mode.sh" ]; then
+        echo "monitor_mode.sh not found in ${DRV_DIR}. Skipping monitor helper setup."
+    else
+        echo ": ---------------------------"
+        echo "Running monitor_mode.sh to configure monitor-mode helper."
+        chmod +x "${DRV_DIR}/monitor_mode.sh" 2>/dev/null || true
+        if [ -n "$MONITOR_CHANNEL" ] && [ -n "$MONITOR_IFACE" ]; then
+            CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+        elif [ -n "$MONITOR_CHANNEL" ]; then
+            CHANNEL="$MONITOR_CHANNEL" "${DRV_DIR}/monitor_mode.sh"
+        elif [ -n "$MONITOR_IFACE" ]; then
+            TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+        else
+            "${DRV_DIR}/monitor_mode.sh"
+        fi
+        MONITOR_RESULT=$?
+        if [ $MONITOR_RESULT -ne 0 ]; then
+            echo "Monitor-mode helper reported an error (exit $MONITOR_RESULT)."
+        else
+            echo "Monitor-mode helper installed successfully."
+        fi
+    fi
+fi
 
 # provide driver upgrade information
 echo "Info: Update this driver with the following commands as needed:"
