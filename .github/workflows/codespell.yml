@@ -1,4 +1,6 @@
 name: Codespell CI
+permissions:
+  contents: read
 
 on:
   workflow_dispatch:
