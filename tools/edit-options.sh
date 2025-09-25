@@ -6,11 +6,11 @@
 #
 # To make this file executable:
 #
-# $ chmod +x edit-options.sh
+# $ chmod +x tools/edit-options.sh
 #
 # To execute this file:
 #
-# $ sudo ./edit-options.sh
+# $ sudo ./tools/edit-options.sh
 #
 # Copyright(c) 2023 Nick Morrow
 #
@@ -23,9 +23,13 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 
-SCRIPT_NAME="edit-options.sh"
+SCRIPT_NAME="tools/edit-options.sh"
 # SCRIPT_VERSION="20240129"
 OPTIONS_FILE="8821au.conf"
+
+# Determine the script directory and the root directory of the repo
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # check to ensure sudo was used to start the script
 if [ "$(id -u)" -ne 0 ]; then
@@ -35,25 +39,25 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 
-DEFAULT_EDITOR="$(cat default-editor.txt)"
+DEFAULT_EDITOR="$(cat "${ROOT_DIR}/default-editor.txt")"
 # try to find the user's default text editor through the EDITORS_SEARCH array
-for TEXT_EDITOR in "${VISUAL}" "${EDITOR}" "${DEFAULT_EDITOR}" vi; do
+for TEXT_EDITOR in "${VISUAL}" "${EDITOR}" "${DEFAULT_EDITOR}" nano; do
         command -v "${TEXT_EDITOR}" >/dev/null 2>&1 && break
 done
 # failure message if no editor was found
 if ! command -v "${TEXT_EDITOR}" >/dev/null 2>&1; then
         echo "No text editor was found (default: ${DEFAULT_EDITOR})."
-        echo "Please install ${DEFAULT_EDITOR} or edit the file 'default-editor.txt' to specify your editor."
+        echo "Please install ${DEFAULT_EDITOR} or edit the file '${ROOT_DIR}/default-editor.txt' to specify your editor."
         echo "Once complete, please run \"sudo ./${SCRIPT_NAME}\""
         exit 1
 fi
 
 
 if [ -f "/etc/modprobe.d/${OPTIONS_FILE}" ]; then
-	${TEXT_EDITOR} /etc/modprobe.d/${OPTIONS_FILE}
+	${TEXT_EDITOR} "/etc/modprobe.d/${OPTIONS_FILE}"
 else
-	cp -f ${OPTIONS_FILE} /etc/modprobe.d
-	${TEXT_EDITOR} /etc/modprobe.d/${OPTIONS_FILE}
+	cp -f "${ROOT_DIR}/${OPTIONS_FILE}" /etc/modprobe.d
+	${TEXT_EDITOR} "/etc/modprobe.d/${OPTIONS_FILE}"
 fi
 
 
