@@ -108,6 +108,39 @@ find_iface() {
   return 1
 }
 
+wait_for_iface() {
+  local target="$1" discovered="" attempts=0
+  local max_attempts=30
+
+  while (( attempts < max_attempts )); do
+    if [[ -n "$target" ]]; then
+      if ip link show "$target" >/dev/null 2>&1; then
+        echo "$target"
+        return 0
+      fi
+    else
+      discovered="$(find_iface || true)"
+      if [[ -n "$discovered" ]]; then
+        echo "$discovered"
+        return 0
+      fi
+    fi
+
+    if (( attempts == 0 )); then
+      if [[ -n "$target" ]]; then
+        LOG "Waiting for interface '$target' to appear..."
+      else
+        LOG "Waiting for an 8821au interface to be ready..."
+      fi
+    fi
+
+    sleep 1
+    ((attempts++))
+  done
+
+  return 1
+}
+
 main() {
   for binary in ip iw; do
     if ! command_exists "$binary"; then
@@ -123,18 +156,13 @@ main() {
     exit 1
   fi
 
-  local iface="$TARGET_IFACE"
-  if [[ -n "$iface" ]]; then
-    if ! ip link show "$iface" >/dev/null 2>&1; then
-      LOG "Interface '$iface' not present."
-      exit 1
+  local iface
+  if ! iface="$(wait_for_iface "$TARGET_IFACE")"; then
+    if [[ -n "$TARGET_IFACE" ]]; then
+      LOG "Interface '$TARGET_IFACE' did not become ready in time."
+    else
+      LOG "No 8821au interface detected after waiting."
     fi
-  else
-    iface="$(find_iface || true)"
-  fi
-
-  if [[ -z "${iface:-}" ]]; then
-    LOG "No 8821au interface detected."
     exit 1
   fi
 
@@ -183,6 +211,8 @@ Wants=systemd-udev-settle.service
 [Service]
 Type=oneshot
 ExecStartPre=/bin/sleep 3
+Restart=on-failure
+RestartSec=5
 EOF
 
 # Only pin an interface if the user explicitly provided TARGET_IFACE

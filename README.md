@@ -11,6 +11,19 @@ What you get in this fork:
 - An optional monitor-mode helper service, including scripts and a systemd unit, that simplifies enabling and maintaining monitor mode on the adapter
 - Helper scripts to adjust driver options and to revert the monitor mode configuration
 
+## Quick Start
+
+1. Clone this repository and plug in the RTL8821AU/RTL8811AU USB adapter you plan to use.
+2. From the repository root, run `sudo ./install-driver.sh`. The installer will detect the adapter, install the driver (DKMS when available), and prompt you to enable monitor mode.
+   - Answer `y` and the script installs/enables `wlan-monitor-8821au.service`, so the adapter wakes up in monitor mode automatically after every reboot.
+   - Answer `n` (or press Enter) to keep managed mode. You can enable monitor mode later with the helper script.
+3. Reboot (recommended) and verify with `sudo systemctl status wlan-monitor-8821au.service` or `iw dev` that the interface is in monitor mode.
+
+### Non-interactive or advanced usage
+
+- `sudo ./install-driver.sh --monitor --no-prompt` installs the driver and enables monitor mode without asking.
+- Optional flags such as `--target-iface wlxABC123` or `--channel 6` are available when you need to pin a specific interface or default channel, but they are not required for the common single-adapter setup.
+
 **Important — fork & attribution:**
 This repository is derived from the upstream work by morrownr. All upstream copyright and license terms still apply. Contributions intended for the original driver should be submitted as pull requests to `morrownr/8821au-20210708`. The monitor mode setup and helper tools included here are **exclusively maintained by this fork** and are not part of the upstream project.
 
