@@ -2390,10 +2390,12 @@ const struct country_chplan *rtw_get_chplan_from_country(const char *country_cod
 	map_sz = sizeof(country_chplan_map) / sizeof(struct country_chplan);
 #endif
 
-	for (i = 0; i < map_sz; i++) {
-		if (strncmp(code, map[i].alpha2, 2) == 0) {
-			ent = &map[i];
-			break;
+	if (map != NULL) {
+		for (i = 0; i < map_sz; i++) {
+			if (strncmp(code, map[i].alpha2, 2) == 0) {
+				ent = &map[i];
+				break;
+			}
 		}
 	}
 

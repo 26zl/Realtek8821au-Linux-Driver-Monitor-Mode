@@ -126,6 +126,7 @@ inline void _rtw_vmfree(void *pbuf, u32 sz)
 #endif
 #ifdef PLATFORM_FREEBSD
 	free(pbuf, M_DEVBUF);
+	return;
 #endif
 #ifdef PLATFORM_WINDOWS
 	NdisFreeMemory(pbuf, sz, 0);
@@ -212,10 +213,12 @@ void _rtw_mfree(void *pbuf, u32 sz)
 #endif
 #ifdef PLATFORM_FREEBSD
 	free(pbuf, M_DEVBUF);
+	pbuf = NULL;
 #endif
 #ifdef PLATFORM_WINDOWS
 
 	NdisFreeMemory(pbuf, sz, 0);
+	pbuf = NULL;
 
 #endif
 
