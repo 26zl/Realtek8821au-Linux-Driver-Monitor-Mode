@@ -44,7 +44,7 @@ MODULE_NAME="8821au"
 
 DRV_NAME="rtl8821au"
 DRV_VERSION="5.12.5.2"
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 DRV_DIR="$SCRIPT_DIR"
 
 OPTIONS_FILE="${MODULE_NAME}.conf"
