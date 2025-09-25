@@ -475,77 +475,54 @@ else
 	fi
 fi
 
-# detect if an 8821au/8811au adapter is present
-adapter_present() {
-	for path in /sys/class/net/wlan* /sys/class/net/wlx*; do
-		[ -e "$path" ] || continue
-		modpath=$(readlink -f "$path/device/driver/module" 2>/dev/null || true)
-		mod=${modpath##*/}
-		case "$mod" in
-			*8821au*|*8811au*)
-				return 0 ;;
-		esac
-	done
-	return 1
-}
 
 # optional monitor-mode configuration
-# NOTE: The adapter must be plugged in for monitor-mode configuration to succeed.
+# NOTE: The adapter should be plugged in for monitor-mode configuration to work.
+
 echo
 echo "[monitor_mode] NOTE: Make sure the USB Wi‑Fi adapter is plugged in if you choose to configure monitor mode now."
 echo
 
-# if running interactively and user didn't preselect Monitor, only prompt if adapter is present
+# Ask only if interactive and user didn't preselect Monitor
 if [ $SETUP_MONITOR -ne 1 ] && [ $NO_PROMPT -ne 1 ]; then
-	if ! adapter_present; then
-		echo "[monitor_mode] Adapter not detected — skipping monitor-mode setup prompt. Plug the adapter in and re-run if you want to configure it."
-	else
-		printf "Do you want to configure the monitor-mode helper now? [y/N] "
-		read -r monitor_reply
-		case "$monitor_reply" in
-			[yY][eE][sS]|[yY])
-				SETUP_MONITOR=1 ;;
-		esac
-	fi
+    printf "Do you want to configure the monitor-mode helper now? [y/N] "
+    read -r monitor_reply
+    case "$monitor_reply" in
+        [yY][eE][sS]|[yY]) SETUP_MONITOR=1 ;;
+    esac
 fi
 
 if [ $SETUP_MONITOR -eq 1 ]; then
-	# Double-check adapter presence when running non-interactively or after user chose Yes
-	if ! adapter_present; then
-		echo "[monitor_mode] Adapter not detected — please plug in the USB Wi‑Fi adapter and run monitor_mode.sh later."
-	else
-		if ! command -v bash >/dev/null 2>&1; then
-			echo "[monitor_mode] bash is required to configure the monitor-mode helper. Skipping."
-		elif [ ! -f "${DRV_DIR}/monitor_mode.sh" ]; then
-			echo "[monitor_mode] monitor_mode.sh not found in ${DRV_DIR}. Skipping monitor helper setup."
-		else
-			echo ": ---------------------------"
-			echo "[monitor_mode] Running monitor_mode.sh to configure monitor-mode helper."
-			chmod +x "${DRV_DIR}/monitor_mode.sh" 2>/dev/null || true
-			if [ -n "$MONITOR_CHANNEL" ] && [ -n "$MONITOR_IFACE" ]; then
-				CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
-			elif [ -n "$MONITOR_CHANNEL" ]; then
-				CHANNEL="$MONITOR_CHANNEL" "${DRV_DIR}/monitor_mode.sh"
-			elif [ -n "$MONITOR_IFACE" ]; then
-				TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
-			else
-				"${DRV_DIR}/monitor_mode.sh"
-			fi
-			MONITOR_RESULT=$?
-			if [ $MONITOR_RESULT -ne 0 ]; then
-				echo "[monitor_mode] Monitor-mode helper failed (exit $MONITOR_RESULT)."
-				echo "Tips: Use 'iw dev' to find your interface and run: TARGET_IFACE=<iface> CHANNEL=6 sudo ./monitor_mode.sh"
-			else
-				echo "[monitor_mode] Monitor-mode helper installed successfully."
-			fi
-		fi
-	fi
+    if ! command -v bash >/dev/null 2>&1; then
+        echo "[monitor_mode] bash is required to configure the monitor-mode helper. Skipping."
+    elif [ ! -f "${DRV_DIR}/monitor_mode.sh" ]; then
+        echo "[monitor_mode] monitor_mode.sh not found in ${DRV_DIR}. Skipping monitor helper setup."
+    else
+        echo ": ---------------------------"
+        echo "[monitor_mode] Running monitor_mode.sh to configure monitor-mode helper."
+        chmod +x "${DRV_DIR}/monitor_mode.sh" 2>/dev/null || true
+        if [ -n "$MONITOR_CHANNEL" ] && [ -n "$MONITOR_IFACE" ]; then
+            CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+        elif [ -n "$MONITOR_CHANNEL" ]; then
+            CHANNEL="$MONITOR_CHANNEL" "${DRV_DIR}/monitor_mode.sh"
+        elif [ -n "$MONITOR_IFACE" ]; then
+            TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+        else
+            "${DRV_DIR}/monitor_mode.sh"
+        fi
+        MONITOR_RESULT=$?
+        if [ $MONITOR_RESULT -ne 0 ]; then
+            echo "[monitor_mode] Monitor-mode helper failed (exit $MONITOR_RESULT)."
+            echo "Tips: Use 'iw dev' to list interfaces, then run:"
+            echo "      TARGET_IFACE=&lt;iface&gt; CHANNEL=6 sudo ./monitor_mode.sh"
+        else
+            echo "[monitor_mode] Monitor-mode helper installed successfully."
+            echo
+            echo "Config ok! Enjoy monitoring mode!"
+            echo
+        fi
+    fi
 fi
-
-echo
-echo "Config ok! Enjoy monitoring mode!"
-echo
-
 
 # unblock wifi
 if command -v rfkill >/dev/null 2>&1; then
