@@ -45,11 +45,7 @@ MODULE_NAME="8821au"
 DRV_NAME="rtl8821au"
 DRV_VERSION="5.12.5.2"
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
-REPO_ROOT="$SCRIPT_DIR"
-if [ "$(basename "$SCRIPT_DIR")" = "tools" ]; then
-	REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-fi
-DRV_DIR="$REPO_ROOT"
+DRV_DIR="$SCRIPT_DIR"
 
 OPTIONS_FILE="${MODULE_NAME}.conf"
 
@@ -70,25 +66,6 @@ GARCH="$(uname -m | sed -e "s/i.86/i386/; s/ppc/powerpc/; s/armv.l/arm/; s/aarch
 #	GARCH="$(uname -m | sed -e "s/i.86/i386/; s/ppc/powerpc/; s/armv.l/arm/; s/aarch64/arm64/; s/riscv.*/riscv/;")"
 #fi
 
-MONITOR_HELPER=""
-for candidate in "$REPO_ROOT/tools/monitor-mode.sh" \
-	"$REPO_ROOT/tools/monitor_mode.sh" \
-	"$REPO_ROOT/monitor-mode.sh" \
-	"$REPO_ROOT/monitor_mode.sh" \
-	"$SCRIPT_DIR/monitor-mode.sh" \
-	"$SCRIPT_DIR/monitor_mode.sh"
-do
-	if [ -f "$candidate" ]; then
-		MONITOR_HELPER="$candidate"
-		break
-	fi
-done
-
-MONITOR_HELPER_LABEL=""
-if [ -n "$MONITOR_HELPER" ]; then
-	MONITOR_HELPER_LABEL="$(basename "$MONITOR_HELPER")"
-fi
-
 
 # check to ensure sudo or su - was used to start the script
 if [ "$(id -u)" -ne 0 ]; then
@@ -100,51 +77,30 @@ fi
 
 # support for the NoPrompt option allows non-interactive use of this script
 print_usage() {
-    echo "Syntax $0 [NoPrompt|--no-prompt] [Monitor|--monitor] [--no-monitor]"
-    echo "              [TARGET_IFACE=name|--target-iface name]"
-    echo "              [CHANNEL=n|--channel n]"
-    echo "       Monitor/--monitor   - configure monitor-mode helper after install"
-    echo "       --no-monitor        - skip monitor-mode helper setup"
-    echo "       TARGET_IFACE=/--target-iface - override interface for helper"
-    echo "       CHANNEL=/--channel   - default channel passed to helper"
-    echo "       -h|--help           - Show help"
+    echo "Syntax $0 [NoPrompt] [Monitor] [TARGET_IFACE=name] [CHANNEL=n]"
+    echo "       NoPrompt       - noninteractive mode"
+    echo "       Monitor        - configure monitor-mode helper after install"
+    echo "       TARGET_IFACE=x - override interface passed to monitor helper"
+    echo "       CHANNEL=n       - default channel passed to monitor helper"
+    echo "       -h|--help       - Show help"
 }
 
 NO_PROMPT=0
 SETUP_MONITOR=0
-FORCE_SKIP_MONITOR=0
 MONITOR_IFACE=""
 MONITOR_CHANNEL=""
 # get the script options
 while [ $# -gt 0 ]
 do
     case $1 in
-        NoPrompt|noprompt|NOPROMPT|--no-prompt)
+        NoPrompt|noprompt|NOPROMPT)
             NO_PROMPT=1 ;;
-        Monitor|MonitorMode|monitor|MONITOR|--monitor|--monitor-mode)
-            SETUP_MONITOR=1
-            FORCE_SKIP_MONITOR=0 ;;
-        --no-monitor|NoMonitor|nomonitor|NOMONITOR)
-            SETUP_MONITOR=0
-            FORCE_SKIP_MONITOR=1 ;;
-        TARGET_IFACE=*|TargetIface=*|target_iface=*|--target-iface=*|--target_iface=*|--TargetIface=*)
+        Monitor|MonitorMode|monitor|MONITOR)
+            SETUP_MONITOR=1 ;;
+        TARGET_IFACE=*|TargetIface=*|target_iface=*)
             MONITOR_IFACE=${1#*=} ;;
-        --target-iface|--target_iface|--TargetIface)
-            shift
-            if [ $# -eq 0 ]; then
-                echo "Missing value for --target-iface"
-                exit 1
-            fi
-            MONITOR_IFACE=$1 ;;
-        CHANNEL=*|Channel=*|channel=*|--channel=*)
+        CHANNEL=*|Channel=*|channel=*)
             MONITOR_CHANNEL=${1#*=} ;;
-        --channel)
-            shift
-            if [ $# -eq 0 ]; then
-                echo "Missing value for --channel"
-                exit 1
-            fi
-            MONITOR_CHANNEL=$1 ;;
         -h|--help|help|-help)
             print_usage
             exit 0 ;;
@@ -155,15 +111,6 @@ do
     esac
     shift
 done
-
-if [ -z "$MONITOR_IFACE" ] && [ -n "${TARGET_IFACE:-}" ]; then
-    MONITOR_IFACE="$TARGET_IFACE"
-fi
-if [ -z "$MONITOR_CHANNEL" ] && [ -n "${CHANNEL:-}" ]; then
-    MONITOR_CHANNEL="$CHANNEL"
-fi
-
-MONITOR_ATTEMPTED=0
 
 # set default editor
 if [ -f "$DRV_DIR/default-editor.txt" ]; then
@@ -537,58 +484,43 @@ echo "[monitor_mode] NOTE: Make sure the USB Wi‑Fi adapter is plugged in if yo
 echo
 
 # Ask only if interactive and user didn't preselect Monitor
-if [ $SETUP_MONITOR -ne 1 ] && [ $NO_PROMPT -ne 1 ] && [ $FORCE_SKIP_MONITOR -ne 1 ]; then
+if [ $SETUP_MONITOR -ne 1 ] && [ $NO_PROMPT -ne 1 ]; then
     printf "Do you want to configure the monitor-mode helper now? [y/N] "
     read -r monitor_reply
     case "$monitor_reply" in
-        [yY][eE][sS]|[yY])
-            SETUP_MONITOR=1
-            FORCE_SKIP_MONITOR=0
-            ;;
-        *)
-            FORCE_SKIP_MONITOR=1
-            ;;
+        [yY][eE][sS]|[yY]) SETUP_MONITOR=1 ;;
     esac
 fi
 
 if [ $SETUP_MONITOR -eq 1 ]; then
-    MONITOR_ATTEMPTED=1
     if ! command -v bash >/dev/null 2>&1; then
         echo "[monitor_mode] bash is required to configure the monitor-mode helper. Skipping."
-    elif [ -z "$MONITOR_HELPER" ]; then
-        echo "[monitor_mode] Unable to locate monitor helper script in ${REPO_ROOT}. Skipping."
+    elif [ ! -f "${DRV_DIR}/tools/monitor-mode.sh" ]; then
+        echo "[monitor_mode] monitor-mode.sh not found in ${DRV_DIR}/tools. Skipping monitor helper setup."
     else
         echo ": ---------------------------"
-        echo "[monitor_mode] Running ${MONITOR_HELPER_LABEL:-monitor-mode.sh} to configure monitor-mode helper."
-        chmod +x "$MONITOR_HELPER" 2>/dev/null || true
+        echo "[monitor_mode] Running tools/monitor-mode.sh to configure monitor-mode helper."
+        chmod +x "${DRV_DIR}/tools/monitor-mode.sh" 2>/dev/null || true
         if [ -n "$MONITOR_CHANNEL" ] && [ -n "$MONITOR_IFACE" ]; then
-            CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "$MONITOR_HELPER"
+            CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/tools/monitor-mode.sh"
         elif [ -n "$MONITOR_CHANNEL" ]; then
-            CHANNEL="$MONITOR_CHANNEL" "$MONITOR_HELPER"
+            CHANNEL="$MONITOR_CHANNEL" "${DRV_DIR}/tools/monitor-mode.sh"
         elif [ -n "$MONITOR_IFACE" ]; then
-            TARGET_IFACE="$MONITOR_IFACE" "$MONITOR_HELPER"
+            TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/tools/monitor-mode.sh"
         else
-            "$MONITOR_HELPER"
+            "${DRV_DIR}/tools/monitor-mode.sh"
         fi
         MONITOR_RESULT=$?
         if [ $MONITOR_RESULT -ne 0 ]; then
             echo "[monitor_mode] Monitor-mode helper failed (exit $MONITOR_RESULT)."
             echo "Tips: Use 'iw dev' to list interfaces, then run:"
-            printf '      TARGET_IFACE=<iface> CHANNEL=6 sudo "%s"\n' "$MONITOR_HELPER"
+            echo '      TARGET_IFACE=<iface> CHANNEL=6 sudo tools/monitor-mode.sh'
         else
             echo "[monitor_mode] Monitor-mode helper installed successfully."
             echo
             echo "Config ok! Enjoy monitoring mode!"
             echo
         fi
-    fi
-fi
-
-if [ $MONITOR_ATTEMPTED -eq 0 ] && [ $FORCE_SKIP_MONITOR -ne 1 ] && [ -n "$MONITOR_HELPER" ]; then
-    echo "[monitor_mode] To configure monitor mode later, run:"
-    printf '      sudo "%s"\n' "$MONITOR_HELPER"
-    if [ -n "$MONITOR_CHANNEL" ] || [ -n "$MONITOR_IFACE" ]; then
-        echo "      (add TARGET_IFACE=<iface> and/or CHANNEL=<n> if needed)"
     fi
 fi
 

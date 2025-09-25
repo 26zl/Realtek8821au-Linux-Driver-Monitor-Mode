@@ -66,7 +66,7 @@ if [[ -n "$SELECTED_IFACE" ]]; then
 else
   if ! SELECTED_IFACE="$(find_8821au_iface)"; then
     echo "[monitor_mode] Unable to detect an 8821au-driven interface." >&2
-    echo "               Specify it explicitly: TARGET_IFACE=wlxabc sudo ./monitor_mode.sh" >&2
+    echo "               Specify it explicitly: TARGET_IFACE=wlxabc sudo tools/monitor-mode.sh" >&2
     exit 1
   fi
 fi
@@ -193,7 +193,7 @@ if command_exists nmcli && systemctl list-unit-files NetworkManager.service >/de
   mkdir -p /etc/NetworkManager/conf.d
   cat <<EOF > "$NM_CONF_PATH"
 [keyfile]
-# Automatically managed by monitor_mode.sh -- edit if needed.
+# Automatically managed by monitor-mode.sh 
 unmanaged-devices=interface-name:${SELECTED_IFACE}
 EOF
   systemctl reload NetworkManager.service 2>/dev/null || systemctl try-restart NetworkManager.service 2>/dev/null || true
