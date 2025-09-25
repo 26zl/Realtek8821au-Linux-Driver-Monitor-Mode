@@ -44,7 +44,8 @@ MODULE_NAME="8821au"
 
 DRV_NAME="rtl8821au"
 DRV_VERSION="5.12.5.2"
-DRV_DIR="$(pwd)"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+DRV_DIR="$SCRIPT_DIR"
 
 OPTIONS_FILE="${MODULE_NAME}.conf"
 
@@ -111,9 +112,12 @@ do
     shift
 done
 
-
 # set default editor
-DEFAULT_EDITOR="$(cat default-editor.txt)"
+if [ -f "$DRV_DIR/default-editor.txt" ]; then
+  DEFAULT_EDITOR="$(cat "$DRV_DIR/default-editor.txt")"
+else
+  DEFAULT_EDITOR="nano"
+fi
 # try to find the user's default text editor through the EDITORS_SEARCH array
 for TEXT_EDITOR in "${VISUAL}" "${EDITOR}" "${DEFAULT_EDITOR}" vi; do
 	command -v "${TEXT_EDITOR}" >/dev/null 2>&1 && break
@@ -471,58 +475,75 @@ else
 	fi
 fi
 
+# detect if an 8821au/8811au adapter is present
+adapter_present() {
+	for path in /sys/class/net/wlan* /sys/class/net/wlx*; do
+		[ -e "$path" ] || continue
+		modpath=$(readlink -f "$path/device/driver/module" 2>/dev/null || true)
+		mod=${modpath##*/}
+		case "$mod" in
+			*8821au*|*8811au*)
+				return 0 ;;
+		esac
+	done
+	return 1
+}
+
 # optional monitor-mode configuration
+# NOTE: The adapter must be plugged in for monitor-mode configuration to succeed.
+echo
+echo "[monitor_mode] NOTE: Make sure the USB Wi‑Fi adapter is plugged in if you choose to configure monitor mode now."
+echo
+
+# if running interactively and user didn't preselect Monitor, only prompt if adapter is present
 if [ $SETUP_MONITOR -ne 1 ] && [ $NO_PROMPT -ne 1 ]; then
-    printf "Do you want to configure the monitor-mode helper now? [y/N] "
-    read -r monitor_reply
-    case "$monitor_reply" in
-        [yY][eE][sS]|[yY])
-            SETUP_MONITOR=1 ;;
-    esac
+	if ! adapter_present; then
+		echo "[monitor_mode] Adapter not detected — skipping monitor-mode setup prompt. Plug the adapter in and re-run if you want to configure it."
+	else
+		printf "Do you want to configure the monitor-mode helper now? [y/N] "
+		read -r monitor_reply
+		case "$monitor_reply" in
+			[yY][eE][sS]|[yY])
+				SETUP_MONITOR=1 ;;
+		esac
+	fi
 fi
 
 if [ $SETUP_MONITOR -eq 1 ]; then
-    if ! command -v bash >/dev/null 2>&1; then
-        echo "bash is required to configure the monitor-mode helper. Skipping."
-    elif [ ! -f "${DRV_DIR}/monitor_mode.sh" ]; then
-        echo "monitor_mode.sh not found in ${DRV_DIR}. Skipping monitor helper setup."
-    else
-        echo ": ---------------------------"
-        echo "Running monitor_mode.sh to configure monitor-mode helper."
-        chmod +x "${DRV_DIR}/monitor_mode.sh" 2>/dev/null || true
-        if [ -n "$MONITOR_CHANNEL" ] && [ -n "$MONITOR_IFACE" ]; then
-            CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
-        elif [ -n "$MONITOR_CHANNEL" ]; then
-            CHANNEL="$MONITOR_CHANNEL" "${DRV_DIR}/monitor_mode.sh"
-        elif [ -n "$MONITOR_IFACE" ]; then
-            TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
-        else
-            "${DRV_DIR}/monitor_mode.sh"
-        fi
-        MONITOR_RESULT=$?
-        if [ $MONITOR_RESULT -ne 0 ]; then
-            echo "Monitor-mode helper reported an error (exit $MONITOR_RESULT)."
-        else
-            echo "Monitor-mode helper installed successfully."
-        fi
-    fi
+	# Double-check adapter presence when running non-interactively or after user chose Yes
+	if ! adapter_present; then
+		echo "[monitor_mode] Adapter not detected — please plug in the USB Wi‑Fi adapter and run monitor_mode.sh later."
+	else
+		if ! command -v bash >/dev/null 2>&1; then
+			echo "[monitor_mode] bash is required to configure the monitor-mode helper. Skipping."
+		elif [ ! -f "${DRV_DIR}/monitor_mode.sh" ]; then
+			echo "[monitor_mode] monitor_mode.sh not found in ${DRV_DIR}. Skipping monitor helper setup."
+		else
+			echo ": ---------------------------"
+			echo "[monitor_mode] Running monitor_mode.sh to configure monitor-mode helper."
+			chmod +x "${DRV_DIR}/monitor_mode.sh" 2>/dev/null || true
+			if [ -n "$MONITOR_CHANNEL" ] && [ -n "$MONITOR_IFACE" ]; then
+				CHANNEL="$MONITOR_CHANNEL" TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+			elif [ -n "$MONITOR_CHANNEL" ]; then
+				CHANNEL="$MONITOR_CHANNEL" "${DRV_DIR}/monitor_mode.sh"
+			elif [ -n "$MONITOR_IFACE" ]; then
+				TARGET_IFACE="$MONITOR_IFACE" "${DRV_DIR}/monitor_mode.sh"
+			else
+				"${DRV_DIR}/monitor_mode.sh"
+			fi
+			MONITOR_RESULT=$?
+			if [ $MONITOR_RESULT -ne 0 ]; then
+				echo "[monitor_mode] Monitor-mode helper failed (exit $MONITOR_RESULT)."
+				echo "Tips: Use 'iw dev' to find your interface and run: TARGET_IFACE=<iface> CHANNEL=6 sudo ./monitor_mode.sh"
+			else
+				echo "[monitor_mode] Monitor-mode helper installed successfully."
+			fi
+		fi
+	fi
 fi
 
-# provide driver upgrade information
-echo "Info: Update this driver with the following commands as needed:"
 echo
-echo "$ git pull"
-echo "$ sudo sh install-driver.sh"
-echo
-echo "Note: Updates to this driver SHOULD be performed before distro"
-echo "      upgrades such as Ubuntu 23.10 to 24.04."
-echo "Note: Updates to this driver SHOULD be performed before major"
-echo "      upgrades such as kernel 6.5 to 6.6."
-echo "Note: Updates can be performed as often as you like. It is"
-echo "      recommended to update at least every 3 months."
-echo "Note: Work on this driver, like the Linux kernel, is continuous."
-echo
-echo "Enjoy!"
+echo "Config ok! Enjoy monitoring mode!"
 echo
 
 

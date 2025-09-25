@@ -28,4 +28,17 @@ Monitor mode enables passive capture of wireless traffic. It is essential to use
 
 - **Android Cross-Compilation Support**: Adapting the driver build system to compile for Android kernels and architectures
 
+### Known Limitations
+
+The adapter must be plugged in during boot for the automatic monitor mode service to work reliably.  
+If the adapter is plugged in after boot, the monitor mode service may not start automatically.  
+In that case, you can simply re-run the monitor mode setup script manually from the cloned repository, for example:
+
+```bash
+cd /path/to/Realtek-8821au-driver-with-monitor-mode/tools
+sudo ./monitor-mode.sh
+or
+sudo TARGET_IFACE=<iface> ./monitor-mode.sh
+```
+
 For more about the driver, check out the upstream readme.

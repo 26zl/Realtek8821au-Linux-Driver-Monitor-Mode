@@ -29,7 +29,7 @@
 # GNU General Public License for more details.
 
 SCRIPT_NAME="remove-driver.sh"
-SCRIPT_VERSION="20240314"
+SCRIPT_VERSION="20241004"
 
 MODULE_NAME="8821au"
 
@@ -42,6 +42,7 @@ KARCH="$(uname -m)"
 KVER="$(uname -r)"
 
 MODDESTDIR="/lib/modules/${KVER}/kernel/drivers/net/wireless/"
+DKMS_UPDATES_DIR="/lib/modules/${KVER}/updates/dkms"
 
 SERVICE="wlan-monitor-8821au.service"
 HELPER="/usr/local/bin/wlan-monitor-8821au.sh"
@@ -103,6 +104,8 @@ remove_monitor_helper() {
 
 	if [ -n "$iface" ] && command_exists nmcli; then
 		nmcli dev set "$iface" managed yes 2>/dev/null || true
+		# Reload NetworkManager so it immediately re-manages the device
+		( systemctl reload NetworkManager 2>/dev/null || nmcli general reload 2>/dev/null ) || true
 	fi
 }
 
@@ -116,7 +119,7 @@ print_usage() {
 	echo "Syntax $0 [NoPrompt] [TARGET_IFACE=name]"
 	echo "       NoPrompt       - noninteractive mode"
 	echo "       TARGET_IFACE=x - interface to hand back to NetworkManager"
-	echo "       -h|--help       - Show help"
+	echo "       -h|--help      - Show help"
 }
 
 NO_PROMPT=0
@@ -173,6 +176,19 @@ if [ -f "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODU
 	/sbin/depmod -a "${KVER}"
 fi
 
+# check for and remove dkms-installed module in the standard updates path
+if [ -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko" ]; then
+    echo "Removing dkms-installed module: ${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko"
+    rm -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko"
+    /sbin/depmod -a "${KVER}"
+fi
+
+if [ -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko.xz" ]; then
+    echo "Removing dkms-installed compressed module: ${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko.xz"
+    rm -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko.xz"
+    /sbin/depmod -a "${KVER}"
+fi
+
 if command_exists dkms; then
 	dkms status | while IFS="/,: " read -r drvname drvver kerver _dummy; do
 		case "$drvname" in *${MODULE_NAME})
@@ -193,6 +209,19 @@ if command_exists dkms; then
 		rm -r /usr/src/${DRV_NAME}-${DRV_VERSION}
 	fi
 fi
+
+# Ensure options file is removed regardless of dkms/non-dkms path
+if [ -f /etc/modprobe.d/${OPTIONS_FILE} ]; then
+	echo "Removing ${OPTIONS_FILE} from /etc/modprobe.d"
+	rm -f /etc/modprobe.d/${OPTIONS_FILE}
+fi
+
+# Try to unload the module if it is still loaded, then refresh module deps
+if lsmod | awk '{print $1}' | grep -qx "${MODULE_NAME}"; then
+    echo "Attempting to unload module: ${MODULE_NAME}"
+    /sbin/modprobe -r "${MODULE_NAME}" 2>/dev/null || rmmod "${MODULE_NAME}" 2>/dev/null || true
+fi
+/sbin/depmod -a "${KVER}" 2>/dev/null || true
 
 make clean >/dev/null 2>&1 || true
 echo "The driver and monitor-mode helper were removed successfully."

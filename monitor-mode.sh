@@ -38,7 +38,7 @@ find_8821au_iface() {
     iface="$(basename "$path")"
     modpath="$(readlink -f "$path/device/driver/module" 2>/dev/null || true)"
     mod="$(basename "$modpath" 2>/dev/null || true)"
-    if [[ "$mod" == *"8821au" ]]; then
+    if [[ "$mod" == *"8821au" ]] || [[ "$mod" == *"8811au" ]] || [[ "$mod" == "rtw88_8821au" ]]; then
       echo "$iface"
       return 0
     fi
@@ -90,7 +90,7 @@ find_iface() {
     iface="$(basename "$path")"
     modpath="$(readlink -f "$path/device/driver/module" 2>/dev/null || true)"
     mod="$(basename "$modpath" 2>/dev/null || true)"
-    if [[ "$mod" == *"8821au" ]]; then
+    if [[ "$mod" == *"8821au" ]] || [[ "$mod" == *"8811au" ]] || [[ "$mod" == "rtw88_8821au" ]]; then
       echo "$iface"
       return 0
     fi
@@ -118,6 +118,11 @@ main() {
 
   command_exists rfkill && rfkill unblock wifi || true
 
+  if command_exists rfkill && rfkill list 2>/dev/null | grep -q "Hard blocked: yes"; then
+    LOG "Adapter is hard-blocked (hardware switch). Enable Wi‑Fi and retry."
+    exit 1
+  fi
+
   local iface="$TARGET_IFACE"
   if [[ -n "$iface" ]]; then
     if ! ip link show "$iface" >/dev/null 2>&1; then
@@ -139,6 +144,7 @@ main() {
     nmcli dev set "$iface" managed no || true
   fi
 
+  sleep 0.5  # allow udev to finish attaching the device
   ip link set "$iface" down || true
   if ! iw dev "$iface" set type monitor 2>/dev/null; then
     LOG "Failed to set '$iface' to monitor mode."
@@ -170,15 +176,19 @@ fi
 # Write unit file with real line breaks (avoid literal \n in Environment)
 cat > "$UNIT_PATH" <<EOF
 [Unit]
-Description=Put Realtek 8821au adapter ${SELECTED_IFACE} into monitor mode at boot
-Wants=network-pre.target
-After=network-pre.target
+Description=Put Realtek 8821au adapter into monitor mode at boot
+After=systemd-udev-settle.service NetworkManager.service
+Wants=systemd-udev-settle.service
 
 [Service]
 Type=oneshot
-Environment=TARGET_IFACE=${SELECTED_IFACE}
+ExecStartPre=/bin/sleep 3
 EOF
 
+# Only pin an interface if the user explicitly provided TARGET_IFACE
+if [[ -n "${TARGET_IFACE:-}" ]]; then
+  echo "Environment=TARGET_IFACE=${SELECTED_IFACE}" >> "$UNIT_PATH"
+fi
 if [[ "$CHANNEL" != "1" ]]; then
   echo "Environment=CHANNEL=${CHANNEL}" >> "$UNIT_PATH"
 fi
