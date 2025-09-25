@@ -41,4 +41,10 @@ or
 sudo TARGET_IFACE=<iface> ./monitor-mode.sh
 ```
 
-For more about the driver, check out the upstream readme.
+### Stuck?
+
+If you run into problems:
+
+- Open an issue in this repository with details about your system and error messages.
+- For driver-specific issues (not related to monitor mode), check the upstream project:  
+  https://github.com/morrownr/8821au-20210708
