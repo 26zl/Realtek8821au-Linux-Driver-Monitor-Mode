@@ -2,5 +2,6 @@ config RTL8821AU
 	tristate "Realtek 8821A USB WiFi"
 	depends on USB
 	help
-	  Help message of RTL8821AU
+	  Realtek RTL8821AU/RTL8811AU USB WiFi adapter driver.
+	  Supports managed, monitor, and AP modes on 2.4 GHz and 5 GHz bands.
 

@@ -29,7 +29,7 @@
 # GNU General Public License for more details.
 
 SCRIPT_NAME="remove-driver.sh"
-SCRIPT_VERSION="20241004"
+SCRIPT_VERSION="20260211"
 
 MODULE_NAME="8821au"
 
@@ -48,6 +48,8 @@ SERVICE="wlan-monitor-8821au.service"
 HELPER="/usr/local/bin/wlan-monitor-8821au.sh"
 UNIT="/etc/systemd/system/${SERVICE}"
 NM_CONF="/etc/NetworkManager/conf.d/10-unmanaged-8821au.conf"
+UDEV_RULE="/etc/udev/rules.d/90-8821au-monitor.rules"
+CONNMAN_MARKER="/etc/connman/.8821au-monitor-marker"
 
 command_exists() {
 	command -v "$1" >/dev/null 2>&1
@@ -93,6 +95,24 @@ remove_monitor_helper() {
 		systemctl disable --now "$SERVICE" 2>/dev/null || true
 	fi
 	rm -f "$UNIT" "$HELPER" "$NM_CONF"
+
+	# Remove udev hot-plug rule
+	if [ -f "$UDEV_RULE" ]; then
+		rm -f "$UDEV_RULE"
+		udevadm control --reload-rules 2>/dev/null || true
+	fi
+
+	# Remove connman blacklist entry
+	if [ -f "$CONNMAN_MARKER" ]; then
+		marker_iface="$(cat "$CONNMAN_MARKER" 2>/dev/null || true)"
+		if [ -n "$marker_iface" ] && [ -f /etc/connman/main.conf ]; then
+			sed -i "s/,${marker_iface}//g; s/${marker_iface},//g; s/${marker_iface}//g" /etc/connman/main.conf
+			# Remove empty blacklist line
+			sed -i '/^NetworkInterfaceBlacklist=$/d' /etc/connman/main.conf
+		fi
+		rm -f "$CONNMAN_MARKER"
+	fi
+
 	if command_exists systemctl; then
 		systemctl daemon-reload 2>/dev/null || true
 	fi
@@ -102,10 +122,15 @@ remove_monitor_helper() {
 		iface=$(find_8821au_iface 2>/dev/null || true)
 	fi
 
-	if [ -n "$iface" ] && command_exists nmcli; then
-		nmcli dev set "$iface" managed yes 2>/dev/null || true
-		# Reload NetworkManager so it immediately re-manages the device
-		( systemctl reload NetworkManager 2>/dev/null || nmcli general reload 2>/dev/null ) || true
+	# Re-manage the interface in whichever network manager is active
+	if [ -n "$iface" ]; then
+		if command_exists nmcli; then
+			nmcli dev set "$iface" managed yes 2>/dev/null || true
+			( systemctl reload NetworkManager 2>/dev/null || nmcli general reload 2>/dev/null ) || true
+		elif command_exists connmanctl; then
+			connmanctl enable wifi 2>/dev/null || true
+			systemctl try-restart connman.service 2>/dev/null || true
+		fi
 	fi
 }
 

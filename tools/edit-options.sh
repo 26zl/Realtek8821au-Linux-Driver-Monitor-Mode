@@ -39,8 +39,12 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 
-DEFAULT_EDITOR="$(cat "${ROOT_DIR}/default-editor.txt")"
-# try to find the user's default text editor through the EDITORS_SEARCH array
+if [ -f "${ROOT_DIR}/default-editor.txt" ]; then
+	DEFAULT_EDITOR="$(cat "${ROOT_DIR}/default-editor.txt")"
+else
+	DEFAULT_EDITOR="nano"
+fi
+# try to find the user's default text editor
 for TEXT_EDITOR in "${VISUAL}" "${EDITOR}" "${DEFAULT_EDITOR}" nano; do
         command -v "${TEXT_EDITOR}" >/dev/null 2>&1 && break
 done

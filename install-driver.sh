@@ -38,7 +38,7 @@
 # GNU General Public License for more details.
 
 SCRIPT_NAME="install-driver.sh"
-SCRIPT_VERSION="20241003"
+SCRIPT_VERSION="20260211"
 
 MODULE_NAME="8821au"
 
@@ -118,7 +118,7 @@ if [ -f "$DRV_DIR/default-editor.txt" ]; then
 else
   DEFAULT_EDITOR="nano"
 fi
-# try to find the user's default text editor through the EDITORS_SEARCH array
+# try to find the user's default text editor
 for TEXT_EDITOR in "${VISUAL}" "${EDITOR}" "${DEFAULT_EDITOR}" vi; do
 	command -v "${TEXT_EDITOR}" >/dev/null 2>&1 && break
 done

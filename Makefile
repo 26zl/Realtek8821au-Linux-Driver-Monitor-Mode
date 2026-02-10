@@ -23,7 +23,7 @@ EXTRA_CFLAGS += -Wno-implicit-fallthrough
 # Activates Concurrent Mode if uncommented
 #EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE
 
-# Sets wireless regulatory (REGD) sourse to OS
+# Sets wireless regulatory (REGD) source to OS
 EXTRA_CFLAGS += -DCONFIG_REGD_SRC_FROM_OS
 # May be needed to ensure all channels are scanned
 EXTRA_CFLAGS += -DCONFIG_FORCE_SW_CHANNEL_PLAN
@@ -87,7 +87,7 @@ CONFIG_GSPI_HCI = n
 CONFIG_AP_MODE = y
 CONFIG_P2P = y
 CONFIG_MP_INCLUDED = n
-CONFIG_POWER_SAVING = y
+CONFIG_POWER_SAVING = n
 CONFIG_IPS_MODE = default
 CONFIG_LPS_MODE = default
 CONFIG_USB_AUTOSUSPEND = n

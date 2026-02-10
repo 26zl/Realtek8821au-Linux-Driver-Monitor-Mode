@@ -2,6 +2,8 @@ modules.order
 Module.symvers
 *.cmd
 *.ko
+*.ko.xz
+*.ko.zst
 *.mod
 *.mod.c
 *.o
@@ -27,5 +29,7 @@ Module.symvers
 # macOS
 .DS_Store
 
-# VSCode
+# IDE and tooling
 .vscode/
+.claude/
+CLAUDE.md

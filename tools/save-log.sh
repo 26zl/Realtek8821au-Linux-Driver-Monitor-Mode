@@ -14,7 +14,7 @@
 #
 # $ sudo sh save-log.sh
 
-SCRIPT_NAME="save-log.sh"
+SCRIPT_NAME="tools/save-log.sh"
 
 
 # check to ensure sudo was used to start the script

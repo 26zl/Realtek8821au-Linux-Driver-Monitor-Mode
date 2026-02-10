@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Purpose: Configure a Realtek 8821AU/8811AU USB adapter for monitor mode at boot.
-# Works across Debian-based desktops (Ubuntu, Mint, Debian) and Raspberry Pi OS.
+# Works across Debian-based desktops (Ubuntu, Mint, Debian), Raspberry Pi OS,
+# Arch Linux, Fedora, and other systemd-based distributions.
 
 set -euo pipefail
 
@@ -30,6 +31,28 @@ TARGET_IFACE="${TARGET_IFACE:-}"
 HELPER_PATH="/usr/local/bin/wlan-monitor-8821au.sh"
 UNIT_PATH="/etc/systemd/system/wlan-monitor-8821au.service"
 NM_CONF_PATH="/etc/NetworkManager/conf.d/10-unmanaged-8821au.conf"
+UDEV_RULE_PATH="/etc/udev/rules.d/90-8821au-monitor.rules"
+CONNMAN_MARKER="/etc/connman/.8821au-monitor-marker"
+
+# Detect which network manager is active on this system.
+# Returns: "NetworkManager", "iwd", "connman", or "none"
+detect_net_manager() {
+  if systemctl is-active --quiet NetworkManager.service 2>/dev/null; then
+    echo "NetworkManager"
+  elif systemctl is-active --quiet iwd.service 2>/dev/null; then
+    echo "iwd"
+  elif systemctl is-active --quiet connman.service 2>/dev/null; then
+    echo "connman"
+  elif command_exists nmcli; then
+    echo "NetworkManager"
+  elif command_exists iwctl; then
+    echo "iwd"
+  elif command_exists connmanctl; then
+    echo "connman"
+  else
+    echo "none"
+  fi
+}
 
 find_8821au_iface() {
   local iface modpath mod
@@ -71,8 +94,11 @@ else
   fi
 fi
 
+NET_MANAGER="$(detect_net_manager)"
+echo "[monitor_mode] Detected network manager: $NET_MANAGER"
 echo "[monitor_mode] Configuring monitor helper for interface '$SELECTED_IFACE' (channel $CHANNEL)."
 
+# Write the helper script (runs at boot / service restart)
 cat <<'HELPER' > "$HELPER_PATH"
 #!/usr/bin/env bash
 set -euo pipefail
@@ -168,8 +194,13 @@ main() {
 
   LOG "Using interface: $iface"
 
+  # Tell the active network manager to release the interface
   if command_exists nmcli; then
     nmcli dev set "$iface" managed no || true
+  elif command_exists iwctl; then
+    iwctl station "$iface" disconnect 2>/dev/null || true
+  elif command_exists connmanctl; then
+    connmanctl disable wifi 2>/dev/null || true
   fi
 
   sleep 0.5  # allow udev to finish attaching the device
@@ -189,30 +220,62 @@ main "$@"
 HELPER
 chmod +x "$HELPER_PATH"
 
-if command_exists nmcli && systemctl list-unit-files NetworkManager.service >/dev/null 2>&1; then
-  mkdir -p /etc/NetworkManager/conf.d
-  cat <<EOF > "$NM_CONF_PATH"
+# Persistent network manager configuration
+case "$NET_MANAGER" in
+  NetworkManager)
+    mkdir -p /etc/NetworkManager/conf.d
+    cat <<EOF > "$NM_CONF_PATH"
 [keyfile]
-# Automatically managed by monitor-mode.sh 
+# Automatically managed by monitor-mode.sh
 unmanaged-devices=interface-name:${SELECTED_IFACE}
 EOF
-  systemctl reload NetworkManager.service 2>/dev/null || systemctl try-restart NetworkManager.service 2>/dev/null || true
-else
-  echo "[monitor_mode] NetworkManager not detected; skipping persistent unmanaged configuration."
-fi
+    systemctl reload NetworkManager.service 2>/dev/null || systemctl try-restart NetworkManager.service 2>/dev/null || true
+    ;;
+  iwd)
+    echo "[monitor_mode] iwd ignores monitor-mode interfaces; no persistent config needed."
+    ;;
+  connman)
+    mkdir -p /etc/connman
+    CONNMAN_CONF="/etc/connman/main.conf"
+    if [ -f "$CONNMAN_CONF" ]; then
+      if grep -q "^NetworkInterfaceBlacklist" "$CONNMAN_CONF"; then
+        if ! grep -q "$SELECTED_IFACE" "$CONNMAN_CONF"; then
+          sed -i "s/^NetworkInterfaceBlacklist=\(.*\)/NetworkInterfaceBlacklist=\1,${SELECTED_IFACE}/" "$CONNMAN_CONF"
+        fi
+      else
+        echo "NetworkInterfaceBlacklist=${SELECTED_IFACE}" >> "$CONNMAN_CONF"
+      fi
+    else
+      cat <<EOF > "$CONNMAN_CONF"
+[General]
+NetworkInterfaceBlacklist=${SELECTED_IFACE}
+EOF
+    fi
+    echo "$SELECTED_IFACE" > "$CONNMAN_MARKER"
+    systemctl try-restart connman.service 2>/dev/null || true
+    ;;
+  *)
+    echo "[monitor_mode] No supported network manager detected; skipping persistent unmanaged configuration."
+    ;;
+esac
 
-# Write unit file with real line breaks (avoid literal \n in Environment)
+# Determine After= dependency for the systemd unit
+case "$NET_MANAGER" in
+  NetworkManager) AFTER_SERVICE="NetworkManager.service" ;;
+  iwd)            AFTER_SERVICE="iwd.service" ;;
+  connman)        AFTER_SERVICE="connman.service" ;;
+  *)              AFTER_SERVICE="" ;;
+esac
+
+# Write systemd unit file
 cat > "$UNIT_PATH" <<EOF
 [Unit]
 Description=Put Realtek 8821au adapter into monitor mode at boot
-After=systemd-udev-settle.service NetworkManager.service
+After=systemd-udev-settle.service${AFTER_SERVICE:+ $AFTER_SERVICE}
 Wants=systemd-udev-settle.service
 
 [Service]
 Type=oneshot
-ExecStartPre=/bin/sleep 3
-Restart=on-failure
-RestartSec=5
 EOF
 
 # Only pin an interface if the user explicitly provided TARGET_IFACE
@@ -231,9 +294,18 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+# Install udev rule for hot-plug support
+echo "[monitor_mode] Installing udev rule for hot-plug support..."
+cat > "$UDEV_RULE_PATH" <<'EOF'
+# Automatically restart the monitor-mode service when the 8821au adapter is plugged in.
+# Managed by monitor-mode.sh — do not edit manually.
+ACTION=="add", SUBSYSTEM=="net", DRIVERS=="rtl8821au", RUN+="/bin/systemctl restart wlan-monitor-8821au.service"
+EOF
+udevadm control --reload-rules 2>/dev/null || true
+
 systemctl daemon-reload
 systemctl enable --now wlan-monitor-8821au.service
 
 echo
-echo "[monitor_mode] Monitor mode service enabled. Current iw dev output:"
+echo "[monitor_mode] Monitor mode service enabled (with hot-plug udev rule). Current iw dev output:"
 iw dev
