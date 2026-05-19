@@ -861,21 +861,21 @@ void *rtw_malloc2d(int h, int w, size_t size)
 {
 	int j;
 
-	void **a = (void **) rtw_zmalloc(h * sizeof(void *) + h * w * size);
+	void **a = (void **) rtw_zmalloc((size_t)h * sizeof(void *) + (size_t)h * (size_t)w * size);
 	if (a == NULL) {
 		RTW_INFO("%s: alloc memory fail!\n", __FUNCTION__);
 		return NULL;
 	}
 
 	for (j = 0; j < h; j++)
-		a[j] = ((char *)(a + h)) + j * w * size;
+		a[j] = ((char *)(a + h)) + (size_t)j * (size_t)w * size;
 
 	return a;
 }
 
 void rtw_mfree2d(void *pbuf, int h, int w, int size)
 {
-	rtw_mfree((u8 *)pbuf, h * sizeof(void *) + w * h * size);
+	rtw_mfree((u8 *)pbuf, (size_t)h * sizeof(void *) + (size_t)w * (size_t)h * (size_t)size);
 }
 
 inline void rtw_os_pkt_free(_pkt *pkt)
