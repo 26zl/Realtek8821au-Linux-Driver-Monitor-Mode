@@ -1,0 +1,3 @@
+# Keep our fork's README on upstream merges.
+# Requires once per clone: git config merge.ours.driver true
+README.md merge=ours
