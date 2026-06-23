@@ -17,6 +17,17 @@ What you get in this fork:
 - **Channel hopping script** for passive scanning across 2.4 GHz and 5 GHz bands
 - Helper scripts to adjust driver options and to revert the monitor mode configuration
 
+## Driver, hardware & kernel compatibility
+
+This fork documents **only** the monitor-mode additions. Everything about the driver itself — which adapters are supported, which kernels and compilers are tested, supported distributions, and driver build options — is maintained upstream and changes over time. It is intentionally **not duplicated here** so it can never go stale; refer to upstream and the reference files inherited in this repo:
+
+- **Supported kernels, compilers & distros** → see the *Compatible Kernels* / *Tested Compilers* sections of the [upstream README](https://github.com/morrownr/8821au-20210708#readme)
+- **Is my adapter supported? (USB device IDs)** → [`supported-device-IDs`](supported-device-IDs)
+- **Driver build options** → [`8821au.conf`](8821au.conf), or run `sudo ./tools/edit-options.sh`
+- **Driver FAQ & troubleshooting** → [`docs/FAQ.md`](docs/FAQ.md)
+- **Concurrent (AP + station) mode** → [`docs/Concurrent_Mode.md`](docs/Concurrent_Mode.md)
+- **Anything else about the driver** → [`morrownr/8821au-20210708`](https://github.com/morrownr/8821au-20210708)
+
 ## Quick Start
 
 1. Clone this repository and plug in the RTL8821AU/RTL8811AU USB adapter you plan to use.
@@ -99,6 +110,5 @@ Monitor mode enables passive capture of wireless traffic. It is essential to use
 
 If you run into problems:
 
-- Open an issue in this repository with details about your system and error messages.
-- For driver-specific issues (not related to monitor mode), check the upstream project:
-  <https://github.com/morrownr/8821au-20210708>
+- For **monitor-mode, hot-plug, or channel-hopping** problems (the parts this fork adds), open an issue in this repository with details about your system and error messages.
+- For **driver-level** issues — adapter not detected, build failures, kernel/compiler support — see [Driver, hardware & kernel compatibility](#driver-hardware--kernel-compatibility) above and the upstream project.

@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - run: sudo apt-get update -y && sudo apt-get install -y codespell
       - name: Run codespell
         run: |

@@ -32,10 +32,12 @@ dmesg | cut -d"]" -f2- | grep "RTW" >> rtw.log
 RESULT=$?
 
 
-if [ "$RESULT" != "0" ]; then
+# grep exit status: 0 = matched, 1 = no lines matched (not an error), >1 = real error
+if [ "$RESULT" -gt 1 ]; then
 	echo "An error occurred while running: ${SCRIPT_NAME}"
-	echo "Did you set a log level > 0 ?"
 	exit 1
+elif [ "$RESULT" -eq 1 ]; then
+	echo "No RTW lines found in the kernel log. Did you set a log level > 0 ?"
 else
 	echo "rtw.log saved successfully."
 fi

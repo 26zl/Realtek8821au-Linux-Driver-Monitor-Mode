@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
   push:
     branches: [ final, work-in-progress ]
-    paths: [ '**.md' ]
+    paths: [ '**.md', '.github/workflows/markdown-link.yml' ]
   pull_request:
     branches: [ final, work-in-progress ]
-    paths: [ '**.md' ]
+    paths: [ '**.md', '.github/workflows/markdown-link.yml' ]
 
 jobs:
   markdown-link-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: gaurav-nelson/github-action-markdown-link-check@v1
+      - uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1

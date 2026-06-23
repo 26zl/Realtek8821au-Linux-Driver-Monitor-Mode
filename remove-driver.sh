@@ -51,6 +51,11 @@ NM_CONF="/etc/NetworkManager/conf.d/10-unmanaged-8821au.conf"
 UDEV_RULE="/etc/udev/rules.d/90-8821au-monitor.rules"
 CONNMAN_MARKER="/etc/connman/.8821au-monitor-marker"
 
+# Tracks whether any module-table refresh failed, so the final message is honest
+# instead of always claiming success. (dkms removal runs in a pipe subshell and
+# can't set this; it reports its own errors directly.)
+REMOVE_FAILED=0
+
 command_exists() {
 	command -v "$1" >/dev/null 2>&1
 }
@@ -76,15 +81,9 @@ find_8821au_iface() {
 		fi
 	done
 
-	for path in /sys/class/net/wl*; do
-		[ -e "$path" ] || continue
-		iface=${path##*/}
-		[ "$iface" = "wlan0" ] && continue
-		[ "$iface" = "lo" ] && continue
-		echo "$iface"
-		return 0
-	done
-
+	# No blind "first wl* interface" fallback: re-managing an arbitrary unrelated
+	# adapter is worse than doing nothing. Removing NM_CONF already restores
+	# default management for our device on the next reload.
 	return 1
 }
 
@@ -106,9 +105,26 @@ remove_monitor_helper() {
 	if [ -f "$CONNMAN_MARKER" ]; then
 		marker_iface="$(cat "$CONNMAN_MARKER" 2>/dev/null || true)"
 		if [ -n "$marker_iface" ] && [ -f /etc/connman/main.conf ]; then
-			sed -i "s/,${marker_iface}//g; s/${marker_iface},//g; s/${marker_iface}//g" /etc/connman/main.conf
-			# Remove empty blacklist line
-			sed -i '/^NetworkInterfaceBlacklist=$/d' /etc/connman/main.conf
+			# Remove only the exact interface token from the comma-separated
+			# blacklist, leaving other interfaces' config intact. A substring
+			# sed would turn e.g. eth0,wlan10,wlan1 into eth00 when removing wlan1.
+			if awk -v iface="$marker_iface" '
+					/^NetworkInterfaceBlacklist=/ {
+						n = split(substr($0, index($0, "=") + 1), a, ",")
+						out = ""
+						for (i = 1; i <= n; i++)
+							if (a[i] != iface && a[i] != "")
+								out = (out == "" ? a[i] : out "," a[i])
+						if (out == "") next
+						print "NetworkInterfaceBlacklist=" out
+						next
+					}
+					{ print }
+				' /etc/connman/main.conf > /etc/connman/main.conf.tmp; then
+				mv /etc/connman/main.conf.tmp /etc/connman/main.conf
+			else
+				rm -f /etc/connman/main.conf.tmp
+			fi
 		fi
 		rm -f "$CONNMAN_MARKER"
 	fi
@@ -186,32 +202,32 @@ echo
 if [ -f "${MODDESTDIR}${MODULE_NAME}.ko" ]; then
 	echo "Removing a non-dkms installation: ${MODDESTDIR}${MODULE_NAME}.ko"
 	rm -f "${MODDESTDIR}${MODULE_NAME}.ko"
-	/sbin/depmod -a "${KVER}"
+	/sbin/depmod -a "${KVER}" || REMOVE_FAILED=1
 fi
 
 if [ -f "${MODDESTDIR}rtl${MODULE_NAME}.ko" ]; then
 	echo "Removing a non-dkms installation: ${MODDESTDIR}rtl${MODULE_NAME}.ko"
 	rm -f "${MODDESTDIR}rtl${MODULE_NAME}.ko"
-	/sbin/depmod -a "${KVER}"
+	/sbin/depmod -a "${KVER}" || REMOVE_FAILED=1
 fi
 
 if [ -f "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz" ]; then
 	echo "Removing a non-dkms installation: /usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz"
 	rm -f "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz"
-	/sbin/depmod -a "${KVER}"
+	/sbin/depmod -a "${KVER}" || REMOVE_FAILED=1
 fi
 
 # check for and remove dkms-installed module in the standard updates path
 if [ -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko" ]; then
     echo "Removing dkms-installed module: ${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko"
     rm -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko"
-    /sbin/depmod -a "${KVER}"
+    /sbin/depmod -a "${KVER}" || REMOVE_FAILED=1
 fi
 
 if [ -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko.xz" ]; then
     echo "Removing dkms-installed compressed module: ${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko.xz"
     rm -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko.xz"
-    /sbin/depmod -a "${KVER}"
+    /sbin/depmod -a "${KVER}" || REMOVE_FAILED=1
 fi
 
 if command_exists dkms; then
@@ -225,10 +241,6 @@ if command_exists dkms; then
 			;;
 		esac
 	done
-	if [ -f /etc/modprobe.d/${OPTIONS_FILE} ]; then
-		echo "Removing ${OPTIONS_FILE} from /etc/modprobe.d"
-		rm /etc/modprobe.d/${OPTIONS_FILE}
-	fi
 	if [ -d /usr/src/${DRV_NAME}-${DRV_VERSION} ]; then
 		echo "Removing source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
 		rm -r /usr/src/${DRV_NAME}-${DRV_VERSION}
@@ -249,7 +261,11 @@ fi
 /sbin/depmod -a "${KVER}" 2>/dev/null || true
 
 make clean >/dev/null 2>&1 || true
-echo "The driver and monitor-mode helper were removed successfully."
+if [ "$REMOVE_FAILED" -ne 0 ]; then
+	echo "Removal completed, but one or more steps reported errors (see output above)."
+else
+	echo "The driver and monitor-mode helper were removed successfully."
+fi
 echo "You may now delete the driver directory if desired."
 echo ": ---------------------------"
 echo

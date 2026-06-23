@@ -50,21 +50,11 @@ DRV_DIR="$SCRIPT_DIR"
 OPTIONS_FILE="${MODULE_NAME}.conf"
 
 KARCH="$(uname -m)"
-#if [ -z "${KARCH+1}" ]; then
-#	KARCH="$(uname -m)"
-#fi
-
 KVER="$(uname -r)"
-#if [ -z "${KVER+1}" ]; then
-#	KVER="$(uname -r)"
-#fi
 
 MODDESTDIR="/lib/modules/${KVER}/kernel/drivers/net/wireless/"
 
 GARCH="$(uname -m | sed -e "s/i.86/i386/; s/ppc/powerpc/; s/armv.l/arm/; s/aarch64/arm64/; s/riscv.*/riscv/;")"
-#if [ -z "${GARCH+1}" ]; then
-#	GARCH="$(uname -m | sed -e "s/i.86/i386/; s/ppc/powerpc/; s/armv.l/arm/; s/aarch64/arm64/; s/riscv.*/riscv/;")"
-#fi
 
 
 # check to ensure sudo or su - was used to start the script
@@ -83,6 +73,7 @@ print_usage() {
     echo "       TARGET_IFACE=x - override interface passed to monitor helper"
     echo "       CHANNEL=n       - default channel passed to monitor helper"
     echo "       -h|--help       - Show help"
+    echo "       (Monitor requires the 'bash' package to be installed.)"
 }
 
 NO_PROMPT=0
@@ -111,6 +102,10 @@ do
     esac
     shift
 done
+
+# Work from the driver source tree regardless of the caller's directory, so the
+# relative make/cp steps below match the script-dir-based DRV_DIR.
+cd "$SCRIPT_DIR" || exit 1
 
 # set default editor
 if [ -f "$DRV_DIR/default-editor.txt" ]; then
@@ -240,30 +235,6 @@ if [ ! -d "/lib/modules/$(uname -r)/build" ]; then
 fi
 
 
-# ensure /usr/sbin is in the PATH so iw can be found
-#if ! echo "$PATH" | grep -qw sbin; then
-#        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-#fi
-
-
-# check to ensure iw is installed
-#if ! command -v iw >/dev/null 2>&1; then
-#	echo "A required package is not installed."
-#	echo "Please install the following package: iw"
-#	echo "Once the package is installed, please run \"sudo ./${SCRIPT_NAME}\""
-#	exit 1
-#fi
-
-
-# check to ensure rfkill is installed
-#if ! command -v rfkill >/dev/null 2>&1; then
-#	echo "A required package is not installed."
-#	echo "Please install the following package: rfkill"
-#	echo "Once the package is installed, please run \"sudo ./${SCRIPT_NAME}\""
-#	exit 1
-#fi
-
-
 echo "Checking for previously installed drivers..."
 
 
@@ -342,8 +313,6 @@ echo "Finished checking for and uninstalling previously installed drivers."
 echo ": ---------------------------"
 
 echo
-#echo "Updating driver."
-#git pull
 echo "Starting installation."
 echo "Copying ${OPTIONS_FILE} to /etc/modprobe.d"
 cp -f ${OPTIONS_FILE} /etc/modprobe.d
@@ -407,7 +376,6 @@ else
 
 # run dkms add
 	dkms add -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf"
-#	dkms add -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER/${KARCH}}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf"
 	RESULT=$?
 
 #	RESULT will be 3 if the DKMS tree already contains the same module/version
@@ -436,10 +404,8 @@ else
 # run dkms build
 	if command -v /usr/bin/time >/dev/null 2>&1; then
 		/usr/bin/time -f "Compile time: %U seconds" dkms build -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
-#		/usr/bin/time -f "Compile time: %U seconds" dkms build -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}/${KARCH}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
 	else
 		dkms build -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
-#		dkms build -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}/${KARCH}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
 	fi
 	RESULT=$?
 
@@ -458,7 +424,6 @@ else
 
 # run dkms install
 	dkms install -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
-#	dkms install -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}/${KARCH}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
 	RESULT=$?
 
 	if [ "$RESULT" != "0" ]; then
@@ -494,7 +459,9 @@ fi
 
 if [ $SETUP_MONITOR -eq 1 ]; then
     if ! command -v bash >/dev/null 2>&1; then
-        echo "[monitor_mode] bash is required to configure the monitor-mode helper. Skipping."
+        echo "[monitor_mode] bash is required to configure the monitor-mode helper, but it is not installed."
+        echo "[monitor_mode] Install bash and re-run: sudo ./${SCRIPT_NAME} Monitor"
+        echo "[monitor_mode] Skipping monitor-mode setup (driver install itself was not affected)."
     elif [ ! -f "${DRV_DIR}/tools/monitor-mode.sh" ]; then
         echo "[monitor_mode] monitor-mode.sh not found in ${DRV_DIR}/tools. Skipping monitor helper setup."
     else

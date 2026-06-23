@@ -27,20 +27,20 @@ jobs:
       fail-fast: false
       matrix:
         compiler:
-          - { cc: gcc-14, cxx: g++-14 }
-          - { cc: gcc-13, cxx: g++-13 }
-          - { cc: gcc-12, cxx: g++-12 }
+          - { cc: gcc-14 }
+          - { cc: gcc-13 }
+          - { cc: gcc-12 }
     name: Ubuntu 24.04 ${{ matrix.compiler.cc }}
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ${{ matrix.compiler.cc }} ${{ matrix.compiler.cxx }} build-essential dkms git iw
+          sudo apt-get install -y ${{ matrix.compiler.cc }} build-essential dkms git iw
       - name: Build
         run: |
           make clean
-          make -j"$(nproc)" CC=${{ matrix.compiler.cc }} CXX=${{ matrix.compiler.cxx }}
+          make -j"$(nproc)" CC=${{ matrix.compiler.cc }}
 
   ubuntu_22_04:
     runs-on: ubuntu-22.04
@@ -48,17 +48,17 @@ jobs:
       fail-fast: false
       matrix:
         compiler:
-          - { cc: gcc-12, cxx: g++-12 }
-          - { cc: gcc-11, cxx: g++-11 }
-          - { cc: gcc-10, cxx: g++-10 }
+          - { cc: gcc-12 }
+          - { cc: gcc-11 }
+          - { cc: gcc-10 }
     name: Ubuntu 22.04 ${{ matrix.compiler.cc }}
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ${{ matrix.compiler.cc }} ${{ matrix.compiler.cxx }} build-essential dkms git iw
+          sudo apt-get install -y ${{ matrix.compiler.cc }} build-essential dkms git iw
       - name: Build
         run: |
           make clean
-          make -j"$(nproc)" CC=${{ matrix.compiler.cc }} CXX=${{ matrix.compiler.cxx }}
+          make -j"$(nproc)" CC=${{ matrix.compiler.cc }}

@@ -36,6 +36,20 @@ if ! ip link show "$IFACE" >/dev/null 2>&1; then
   exit 1
 fi
 
+# Validate dwell so a typo doesn't abort mid-loop with a cryptic 'sleep' error.
+if ! [[ "$DWELL" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "Dwell must be a number in seconds, e.g. 0.5 or 1." >&2
+  exit 1
+fi
+
+# Require monitor mode up front. Otherwise every 'iw set channel' fails, the
+# error is swallowed by 2>/dev/null below, and the loop spins silently forever.
+if ! iw dev "$IFACE" info 2>/dev/null | grep -q "type monitor"; then
+  echo "Interface '$IFACE' is not in monitor mode." >&2
+  echo "Enable it first, e.g.: sudo ./tools/monitor-mode.sh   (TARGET_IFACE=$IFACE)" >&2
+  exit 1
+fi
+
 # 2.4 GHz channels (1-13, widely available)
 CHANNELS_24="1 2 3 4 5 6 7 8 9 10 11 12 13"
 

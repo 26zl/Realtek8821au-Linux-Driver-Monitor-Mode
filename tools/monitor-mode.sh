@@ -22,8 +22,8 @@ for binary in ip iw systemctl; do
 done
 
 CHANNEL="${CHANNEL:-1}"
-if ! [[ "$CHANNEL" =~ ^[0-9]+$ ]]; then
-  echo "[monitor_mode] CHANNEL must be an integer value." >&2
+if ! [[ "$CHANNEL" =~ ^[0-9]+$ ]] || (( CHANNEL < 1 || CHANNEL > 196 )); then
+  echo "[monitor_mode] CHANNEL must be a Wi-Fi channel number between 1 and 196." >&2
   exit 1
 fi
 
@@ -97,6 +97,14 @@ fi
 NET_MANAGER="$(detect_net_manager)"
 echo "[monitor_mode] Detected network manager: $NET_MANAGER"
 echo "[monitor_mode] Configuring monitor helper for interface '$SELECTED_IFACE' (channel $CHANNEL)."
+
+# From here on we write privileged files (helper, NM/connman config, unit, udev
+# rule). If any step fails, the install is partial — point the user at teardown.
+on_error() {
+  echo "[monitor_mode] Setup failed partway through; some files may have been written." >&2
+  echo "[monitor_mode] Run 'sudo ./remove-driver.sh' to clean up, then retry." >&2
+}
+trap on_error ERR
 
 # Write the helper script (runs at boot / service restart)
 cat <<'HELPER' > "$HELPER_PATH"
@@ -210,7 +218,9 @@ main() {
     exit 1
   fi
   ip link set "$iface" up
-  iw dev "$iface" set channel "$CHANNEL" || true
+  if ! iw dev "$iface" set channel "$CHANNEL"; then
+    LOG "Warning: could not set channel $CHANNEL (invalid/unsupported); staying on the adapter's default channel."
+  fi
 
   LOG "Now in monitor mode on channel $CHANNEL. Current iw state:"
   iw dev | sed -n "/Interface $iface/,/^$/p"
@@ -239,7 +249,16 @@ EOF
     CONNMAN_CONF="/etc/connman/main.conf"
     if [ -f "$CONNMAN_CONF" ]; then
       if grep -q "^NetworkInterfaceBlacklist" "$CONNMAN_CONF"; then
-        if ! grep -q "$SELECTED_IFACE" "$CONNMAN_CONF"; then
+        # Append only if the iface is not already an exact comma-separated token
+        # on the blacklist line (a plain substring grep would treat wlan1 as
+        # already-present when only wlan10 is listed).
+        if ! awk -v iface="$SELECTED_IFACE" '
+              /^NetworkInterfaceBlacklist=/ {
+                n = split(substr($0, index($0, "=") + 1), a, ",")
+                for (i = 1; i <= n; i++) if (a[i] == iface) { found = 1 }
+              }
+              END { exit(found ? 0 : 1) }
+            ' "$CONNMAN_CONF"; then
           sed -i "s/^NetworkInterfaceBlacklist=\(.*\)/NetworkInterfaceBlacklist=\1,${SELECTED_IFACE}/" "$CONNMAN_CONF"
         fi
       else
@@ -304,7 +323,15 @@ EOF
 udevadm control --reload-rules 2>/dev/null || true
 
 systemctl daemon-reload
-systemctl enable --now wlan-monitor-8821au.service
+# Enable persistently first, then start best-effort: a oneshot 'start' fails if
+# the adapter isn't ready yet, but the install itself is complete and the udev
+# rule will start it on the next plug-in/boot.
+systemctl enable wlan-monitor-8821au.service
+trap - ERR
+if ! systemctl start wlan-monitor-8821au.service; then
+  echo "[monitor_mode] Service enabled but it could not start now (adapter may not be ready)."
+  echo "[monitor_mode] It will activate automatically on the next plug-in or reboot."
+fi
 
 echo
 echo "[monitor_mode] Monitor mode service enabled (with hot-plug udev rule). Current iw dev output:"

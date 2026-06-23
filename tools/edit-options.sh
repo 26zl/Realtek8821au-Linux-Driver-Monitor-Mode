@@ -24,7 +24,6 @@
 # GNU General Public License for more details.
 
 SCRIPT_NAME="tools/edit-options.sh"
-# SCRIPT_VERSION="20240129"
 OPTIONS_FILE="8821au.conf"
 
 # Determine the script directory and the root directory of the repo
@@ -65,9 +64,14 @@ else
 fi
 
 
-printf "Do you want to apply the new options by rebooting now? (recommended) [Y/n] "
-read -r yn
-case "$yn" in
-	[nN]) ;;
-	*) reboot ;;
-esac
+# Only offer to reboot when running interactively; a closed/non-tty stdin
+# (EOF) must not fall through to an unconfirmed reboot.
+if [ -t 0 ]; then
+	printf "Do you want to apply the new options by rebooting now? (recommended) [Y/n] "
+	if read -r yn; then
+		case "$yn" in
+			[nN]) ;;
+			*) reboot ;;
+		esac
+	fi
+fi

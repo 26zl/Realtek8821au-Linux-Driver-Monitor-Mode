@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
   push:
     branches: [ final, work-in-progress ]
-    paths: [ '**.sh' ]
+    paths: [ '**.sh', '.github/workflows/shellcheck.yml' ]
   pull_request:
     branches: [ final, work-in-progress ]
-    paths: [ '**.sh' ]
+    paths: [ '**.sh', '.github/workflows/shellcheck.yml' ]
 
 jobs:
   shellcheck:
