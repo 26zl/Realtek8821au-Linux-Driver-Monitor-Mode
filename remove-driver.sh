@@ -33,9 +33,14 @@ SCRIPT_VERSION="20260211"
 
 MODULE_NAME="8821au"
 
-DRV_NAME="rtl8821au"
-DRV_VERSION="5.12.5.2"
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
+
+# Single source of truth: derive name/version from dkms.conf (literal fallbacks
+# if the read fails) so they can't drift from the installer or dkms.conf.
+DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
+DRV_NAME="${DRV_NAME:-rtl8821au}"
+DRV_VERSION="$(sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
+DRV_VERSION="${DRV_VERSION:-5.12.5.2}"
 
 OPTIONS_FILE="${MODULE_NAME}.conf"
 
@@ -247,9 +252,9 @@ if command_exists dkms; then
 		REMOVE_FAILED=1
 	fi
 	rm -f "$dkms_status_file"
-	if [ -d /usr/src/${DRV_NAME}-${DRV_VERSION} ]; then
+	if [ -d /usr/src/"${DRV_NAME}-${DRV_VERSION}" ]; then
 		echo "Removing source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
-		rm -r /usr/src/${DRV_NAME}-${DRV_VERSION} || REMOVE_FAILED=1
+		rm -r /usr/src/"${DRV_NAME}-${DRV_VERSION}" || REMOVE_FAILED=1
 	fi
 fi
 

@@ -21,13 +21,20 @@ for binary in ip iw systemctl; do
   fi
 done
 
-CHANNEL="${CHANNEL:-1}"
+DEFAULT_CHANNEL=1
+CHANNEL="${CHANNEL:-$DEFAULT_CHANNEL}"
 if ! [[ "$CHANNEL" =~ ^[0-9]+$ ]] || (( CHANNEL < 1 || CHANNEL > 196 )); then
   echo "[monitor_mode] CHANNEL must be a Wi-Fi channel number between 1 and 196." >&2
   exit 1
 fi
 
 TARGET_IFACE="${TARGET_IFACE:-}"
+
+# Kernel driver name for the udev hot-plug rule, sourced from dkms.conf so it
+# tracks the package name, with a literal fallback if the read fails.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/../dkms.conf" 2>/dev/null)"
+DRV_NAME="${DRV_NAME:-rtl8821au}"
 HELPER_PATH="/usr/local/bin/wlan-monitor-8821au.sh"
 UNIT_PATH="/etc/systemd/system/wlan-monitor-8821au.service"
 NM_CONF_PATH="/etc/NetworkManager/conf.d/10-unmanaged-8821au.conf"
@@ -288,7 +295,7 @@ EOF
 if [[ -n "${TARGET_IFACE:-}" ]]; then
   echo "Environment=TARGET_IFACE=${SELECTED_IFACE}" >> "$UNIT_PATH"
 fi
-if [[ "$CHANNEL" != "1" ]]; then
+if [[ "$CHANNEL" != "$DEFAULT_CHANNEL" ]]; then
   echo "Environment=CHANNEL=${CHANNEL}" >> "$UNIT_PATH"
 fi
 
@@ -306,7 +313,7 @@ SYSTEMCTL_PATH="$(command -v systemctl)"
 cat > "$UDEV_RULE_PATH" <<EOF
 # Automatically restart the monitor-mode service when the 8821au adapter is plugged in.
 # Managed by monitor-mode.sh - do not edit manually.
-ACTION=="add", SUBSYSTEM=="net", DRIVERS=="rtl8821au", RUN+="$SYSTEMCTL_PATH --no-block restart wlan-monitor-8821au.service"
+ACTION=="add", SUBSYSTEM=="net", DRIVERS=="${DRV_NAME}", RUN+="$SYSTEMCTL_PATH --no-block restart wlan-monitor-8821au.service"
 EOF
 udevadm control --reload-rules 2>/dev/null || true
 

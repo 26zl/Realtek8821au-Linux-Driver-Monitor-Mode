@@ -42,10 +42,16 @@ SCRIPT_VERSION="20260211"
 
 MODULE_NAME="8821au"
 
-DRV_NAME="rtl8821au"
-DRV_VERSION="5.12.5.2"
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 DRV_DIR="$SCRIPT_DIR"
+
+# Single source of truth: derive name/version from dkms.conf so a version bump
+# only needs editing there. Literal fallbacks keep the script working if the
+# dkms.conf read ever fails.
+DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
+DRV_NAME="${DRV_NAME:-rtl8821au}"
+DRV_VERSION="$(sed -n 's/^PACKAGE_VERSION="\(.*\)"/\1/p' "$SCRIPT_DIR/dkms.conf" 2>/dev/null)"
+DRV_VERSION="${DRV_VERSION:-5.12.5.2}"
 
 OPTIONS_FILE="${MODULE_NAME}.conf"
 
@@ -248,7 +254,7 @@ if [ -f "${MODDESTDIR}${MODULE_NAME}.ko" ]; then
 	echo "Deleting ${OPTIONS_FILE} from /etc/modprobe.d"
 	rm -f /etc/modprobe.d/${OPTIONS_FILE}
 	echo "Deleting source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
-	rm -rf /usr/src/${DRV_NAME}-${DRV_VERSION}
+	rm -rf /usr/src/"${DRV_NAME}-${DRV_VERSION}"
 	make clean >/dev/null 2>&1
 fi
 
@@ -264,7 +270,7 @@ if [ -f "${MODDESTDIR}rtl${MODULE_NAME}.ko" ]; then
 	echo "Deleting ${OPTIONS_FILE} from /etc/modprobe.d"
 	rm -f /etc/modprobe.d/${OPTIONS_FILE}
 	echo "Deleting source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
-	rm -rf /usr/src/${DRV_NAME}-${DRV_VERSION}
+	rm -rf /usr/src/"${DRV_NAME}-${DRV_VERSION}"
 	make clean >/dev/null 2>&1
 fi
 
@@ -275,12 +281,12 @@ fi
 if [ -f "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz" ]; then
 	echo "Uninstalling a non-dkms installation:"
 	echo "/usr/lib/modules/${KVER}/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz"
-	rm -f /usr/lib/modules/"${KVER}"/kernel/drivers/net/wireless/${DRV_NAME}/${MODULE_NAME}.ko.xz
+	rm -f /usr/lib/modules/"${KVER}"/kernel/drivers/net/wireless/"${DRV_NAME}"/${MODULE_NAME}.ko.xz
 	/sbin/depmod -a "${KVER}"
 	echo "Deleting ${OPTIONS_FILE} from /etc/modprobe.d"
 	rm -f /etc/modprobe.d/${OPTIONS_FILE}
 	echo "Deleting source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
-	rm -rf /usr/src/${DRV_NAME}-${DRV_VERSION}
+	rm -rf /usr/src/"${DRV_NAME}-${DRV_VERSION}"
 	make clean >/dev/null 2>&1
 fi
 
@@ -303,9 +309,9 @@ if command -v dkms >/dev/null 2>&1; then
 		echo "Removing ${OPTIONS_FILE} from /etc/modprobe.d"
 		rm /etc/modprobe.d/${OPTIONS_FILE}
 	fi
-	if [ -d /usr/src/${DRV_NAME}-${DRV_VERSION} ]; then
+	if [ -d /usr/src/"${DRV_NAME}-${DRV_VERSION}" ]; then
 		echo "Removing source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
-		rm -r /usr/src/${DRV_NAME}-${DRV_VERSION}
+		rm -r /usr/src/"${DRV_NAME}-${DRV_VERSION}"
 	fi
 fi
 
@@ -371,11 +377,11 @@ else
 
 # 	the dkms add command requires source in /usr/src/${DRV_NAME}-${DRV_VERSION}
 	echo "Copying source files to /usr/src/${DRV_NAME}-${DRV_VERSION}"
-	cp -r "${DRV_DIR}" /usr/src/${DRV_NAME}-${DRV_VERSION}
+	cp -r "${DRV_DIR}" /usr/src/"${DRV_NAME}-${DRV_VERSION}"
 
 
 # run dkms add
-	dkms add -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf"
+	dkms add -m "${DRV_NAME}" -v "${DRV_VERSION}" -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf"
 	RESULT=$?
 
 #	RESULT will be 3 if the DKMS tree already contains the same module/version
@@ -403,9 +409,9 @@ else
 
 # run dkms build
 	if command -v /usr/bin/time >/dev/null 2>&1; then
-		/usr/bin/time -f "Compile time: %U seconds" dkms build -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
+		/usr/bin/time -f "Compile time: %U seconds" dkms build -m "${DRV_NAME}" -v "${DRV_VERSION}" -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
 	else
-		dkms build -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
+		dkms build -m "${DRV_NAME}" -v "${DRV_VERSION}" -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
 	fi
 	RESULT=$?
 
@@ -423,7 +429,7 @@ else
 
 
 # run dkms install
-	dkms install -m ${DRV_NAME} -v ${DRV_VERSION} -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
+	dkms install -m "${DRV_NAME}" -v "${DRV_VERSION}" -k "${KVER}" -c "/usr/src/${DRV_NAME}-${DRV_VERSION}/dkms.conf" --force
 	RESULT=$?
 
 	if [ "$RESULT" != "0" ]; then
