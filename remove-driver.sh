@@ -35,6 +35,7 @@ MODULE_NAME="8821au"
 
 DRV_NAME="rtl8821au"
 DRV_VERSION="5.12.5.2"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 
 OPTIONS_FILE="${MODULE_NAME}.conf"
 
@@ -51,9 +52,8 @@ NM_CONF="/etc/NetworkManager/conf.d/10-unmanaged-8821au.conf"
 UDEV_RULE="/etc/udev/rules.d/90-8821au-monitor.rules"
 CONNMAN_MARKER="/etc/connman/.8821au-monitor-marker"
 
-# Tracks whether any module-table refresh failed, so the final message is honest
-# instead of always claiming success. (dkms removal runs in a pipe subshell and
-# can't set this; it reports its own errors directly.)
+# Tracks whether any removal step failed, so the final message is honest instead
+# of always claiming success.
 REMOVE_FAILED=0
 
 command_exists() {
@@ -67,23 +67,16 @@ find_8821au_iface() {
 		modpath=$(readlink -f "$path/device/driver/module" 2>/dev/null)
 		mod=${modpath##*/}
 		case "$mod" in
-			*8821au*)
+			*8821au*|*8811au*)
 				echo "$iface"
 				return 0
 				;;
 		esac
 	done
 
-	for candidate in wlan1 wlan2 wlan3; do
-		if ip link show "$candidate" >/dev/null 2>&1; then
-			echo "$candidate"
-			return 0
-		fi
-	done
-
-	# No blind "first wl* interface" fallback: re-managing an arbitrary unrelated
-	# adapter is worse than doing nothing. Removing NM_CONF already restores
-	# default management for our device on the next reload.
+	# No blind fallback: re-managing an arbitrary unrelated adapter is worse than
+	# doing nothing. Removing NM_CONF already restores default management for our
+	# device on the next reload.
 	return 1
 }
 
@@ -155,6 +148,10 @@ if [ "$(id -u)" -ne 0 ]; then
 	echo "Try: \"sudo ./${SCRIPT_NAME}\""
 	exit 1
 fi
+
+# Work from the driver source tree regardless of the caller's directory, so the
+# cleanup target below never runs in an unrelated directory.
+cd "$SCRIPT_DIR" || exit 1
 
 print_usage() {
 	echo "Syntax $0 [NoPrompt] [TARGET_IFACE=name]"
@@ -231,19 +228,28 @@ if [ -f "${DKMS_UPDATES_DIR}/${MODULE_NAME}.ko.xz" ]; then
 fi
 
 if command_exists dkms; then
-	dkms status | while IFS="/,: " read -r drvname drvver kerver _dummy; do
-		case "$drvname" in *${MODULE_NAME})
-			if [ "${kerver}" = "added" ]; then
-				dkms remove -m "${drvname}" -v "${drvver}" --all
-			else
-				dkms remove -m "${drvname}" -v "${drvver}" -k "${kerver}" -c "/usr/src/${drvname}-${drvver}/dkms.conf"
-			fi
-			;;
-		esac
-	done
+	dkms_status_file=$(mktemp) || exit 1
+	if dkms status > "$dkms_status_file"; then
+		while IFS="/,: " read -r drvname drvver kerver _dummy; do
+			[ -n "$drvname" ] || continue
+			[ -n "$drvver" ] || continue
+			[ -n "$kerver" ] || continue
+			case "$drvname" in *${MODULE_NAME})
+				if [ "${kerver}" = "added" ]; then
+					dkms remove -m "${drvname}" -v "${drvver}" --all || REMOVE_FAILED=1
+				else
+					dkms remove -m "${drvname}" -v "${drvver}" -k "${kerver}" -c "/usr/src/${drvname}-${drvver}/dkms.conf" || REMOVE_FAILED=1
+				fi
+				;;
+			esac
+		done < "$dkms_status_file"
+	else
+		REMOVE_FAILED=1
+	fi
+	rm -f "$dkms_status_file"
 	if [ -d /usr/src/${DRV_NAME}-${DRV_VERSION} ]; then
 		echo "Removing source files from /usr/src/${DRV_NAME}-${DRV_VERSION}"
-		rm -r /usr/src/${DRV_NAME}-${DRV_VERSION}
+		rm -r /usr/src/${DRV_NAME}-${DRV_VERSION} || REMOVE_FAILED=1
 	fi
 fi
 

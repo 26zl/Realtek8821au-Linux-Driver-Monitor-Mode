@@ -481,7 +481,7 @@ if [ $SETUP_MONITOR -eq 1 ]; then
         if [ $MONITOR_RESULT -ne 0 ]; then
             echo "[monitor_mode] Monitor-mode helper failed (exit $MONITOR_RESULT)."
             echo "Tips: Use 'iw dev' to list interfaces, then run:"
-            echo '      TARGET_IFACE=<iface> CHANNEL=6 sudo tools/monitor-mode.sh'
+            echo '      sudo TARGET_IFACE=<iface> CHANNEL=6 ./tools/monitor-mode.sh'
         else
             echo "[monitor_mode] Monitor-mode helper installed successfully."
             echo

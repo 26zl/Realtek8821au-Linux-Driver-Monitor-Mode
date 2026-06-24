@@ -15,10 +15,21 @@
 
 set -euo pipefail
 
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "Please run this script with sudo." >&2
   exit 1
 fi
+
+for binary in ip iw awk; do
+  if ! command_exists "$binary"; then
+    echo "Required command '$binary' not found. Install it and retry." >&2
+    exit 1
+  fi
+done
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <interface> [band] [dwell]" >&2
@@ -41,12 +52,16 @@ if ! [[ "$DWELL" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   echo "Dwell must be a number in seconds, e.g. 0.5 or 1." >&2
   exit 1
 fi
+if ! awk -v dwell="$DWELL" 'BEGIN { exit(dwell > 0 ? 0 : 1) }'; then
+  echo "Dwell must be greater than 0 seconds." >&2
+  exit 1
+fi
 
 # Require monitor mode up front. Otherwise every 'iw set channel' fails, the
 # error is swallowed by 2>/dev/null below, and the loop spins silently forever.
 if ! iw dev "$IFACE" info 2>/dev/null | grep -q "type monitor"; then
   echo "Interface '$IFACE' is not in monitor mode." >&2
-  echo "Enable it first, e.g.: sudo ./tools/monitor-mode.sh   (TARGET_IFACE=$IFACE)" >&2
+  echo "Enable it first, e.g.: sudo TARGET_IFACE=$IFACE ./tools/monitor-mode.sh" >&2
   exit 1
 fi
 

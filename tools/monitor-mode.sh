@@ -66,17 +66,8 @@ find_8821au_iface() {
       return 0
     fi
   done
-  # Fallback: pick the first external-style interface (wlan1, wlx*)
-  while IFS=':' read -r _ idxiface _; do
-    iface="${idxiface## }"
-    iface="${iface%% @*}"
-    [[ "$iface" == "wlan0" ]] && continue
-    [[ "$iface" == "lo" ]] && continue
-    if [[ "$iface" == wl* ]]; then
-      echo "$iface"
-      return 0
-    fi
-  done < <(ip -o link show)
+  # Avoid guessing. Putting a random wlan/wlp interface into monitor mode can
+  # break the user's primary Wi-Fi connection; ask for TARGET_IFACE instead.
   return 1
 }
 
@@ -89,7 +80,7 @@ if [[ -n "$SELECTED_IFACE" ]]; then
 else
   if ! SELECTED_IFACE="$(find_8821au_iface)"; then
     echo "[monitor_mode] Unable to detect an 8821au-driven interface." >&2
-    echo "               Specify it explicitly: TARGET_IFACE=wlxabc sudo tools/monitor-mode.sh" >&2
+    echo "               Specify it explicitly: sudo TARGET_IFACE=wlxabc ./tools/monitor-mode.sh" >&2
     exit 1
   fi
 fi
@@ -129,16 +120,8 @@ find_iface() {
       return 0
     fi
   done
-  while IFS=':' read -r _ idxiface _; do
-    iface="${idxiface## }"
-    iface="${iface%% @*}"
-    [[ "$iface" == "wlan0" ]] && continue
-    [[ "$iface" == "lo" ]] && continue
-    if [[ "$iface" == wl* ]]; then
-      echo "$iface"
-      return 0
-    fi
-  done < <(ip -o link show)
+  # Avoid guessing. Putting a random wlan/wlp interface into monitor mode can
+  # break the user's primary Wi-Fi connection; ask for TARGET_IFACE instead.
   return 1
 }
 
@@ -259,7 +242,11 @@ EOF
               }
               END { exit(found ? 0 : 1) }
             ' "$CONNMAN_CONF"; then
-          sed -i "s/^NetworkInterfaceBlacklist=\(.*\)/NetworkInterfaceBlacklist=\1,${SELECTED_IFACE}/" "$CONNMAN_CONF"
+          # Append in place so main.conf keeps its owner/mode/SELinux context.
+          # A mktemp in /tmp + cross-filesystem mv would reset them to
+          # 0600/root/tmp_t and can make connman unable to read its own config.
+          # Interface names are alphanumeric, so no sed metachars to escape.
+          sed -i "/^NetworkInterfaceBlacklist=/ s/\$/,${SELECTED_IFACE}/" "$CONNMAN_CONF"
         fi
       else
         echo "NetworkInterfaceBlacklist=${SELECTED_IFACE}" >> "$CONNMAN_CONF"
@@ -315,10 +302,11 @@ EOF
 
 # Install udev rule for hot-plug support
 echo "[monitor_mode] Installing udev rule for hot-plug support..."
-cat > "$UDEV_RULE_PATH" <<'EOF'
+SYSTEMCTL_PATH="$(command -v systemctl)"
+cat > "$UDEV_RULE_PATH" <<EOF
 # Automatically restart the monitor-mode service when the 8821au adapter is plugged in.
-# Managed by monitor-mode.sh — do not edit manually.
-ACTION=="add", SUBSYSTEM=="net", DRIVERS=="rtl8821au", RUN+="/bin/systemctl restart wlan-monitor-8821au.service"
+# Managed by monitor-mode.sh - do not edit manually.
+ACTION=="add", SUBSYSTEM=="net", DRIVERS=="rtl8821au", RUN+="$SYSTEMCTL_PATH --no-block restart wlan-monitor-8821au.service"
 EOF
 udevadm control --reload-rules 2>/dev/null || true
 

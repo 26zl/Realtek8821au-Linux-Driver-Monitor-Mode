@@ -17,6 +17,8 @@ Module.symvers
 # Backup and swap files
 *~
 *.swp
+*.orig
+*.rej
 
 # Logs
 *.log
