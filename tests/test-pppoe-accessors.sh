@@ -9,6 +9,24 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
+SRC=core/rtw_br_ext.c
+
+# CI builds against kernel headers older than 7.1, which still declare these
+# members, so a reintroduced direct use would only break newer kernels.
+if grep -nE -- '->tag_data|->tag([^_[:alnum:]]|$)' "$SRC"; then
+    echo "FAIL - $SRC uses PPPoE flexible-array members hidden since kernel 7.1"
+    exit 1
+fi
+
+# Keep these in step with the accessors in core/rtw_br_ext.c.
+for accessor in '(unsigned char *)(ph + 1)' '(unsigned char *)(tag + 1)'
+do
+    if ! grep -qF -- "$accessor" "$SRC"; then
+        echo "FAIL - $SRC no longer uses: $accessor"
+        exit 1
+    fi
+done
+
 if ! command -v gcc >/dev/null 2>&1; then
     echo "skip - gcc not installed"
     exit 0
@@ -17,22 +35,9 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Keep these in step with the macros in core/rtw_br_ext.c.
-for macro in 'PPPOE_HDR_TAGS(ph)	((unsigned char *)((ph) + 1))' \
-             'PPPOE_TAG_DATA(tag)	((unsigned char *)((tag) + 1))'
-do
-    if ! grep -qF "#define $macro" core/rtw_br_ext.c; then
-        echo "FAIL - core/rtw_br_ext.c no longer defines: $macro"
-        exit 1
-    fi
-done
-
 cat > "$WORK/t.c" <<'CEOF'
 #include <linux/if_pppox.h>
 #include <assert.h>
-
-#define PPPOE_HDR_TAGS(ph)	((unsigned char *)((ph) + 1))
-#define PPPOE_TAG_DATA(tag)	((unsigned char *)((tag) + 1))
 
 int main(void)
 {
@@ -40,8 +45,8 @@ int main(void)
 	struct pppoe_hdr *ph = (struct pppoe_hdr *)buf;
 	struct pppoe_tag *tag = (struct pppoe_tag *)(buf + 16);
 
-	assert((unsigned char *)ph->tag == PPPOE_HDR_TAGS(ph));
-	assert((unsigned char *)tag->tag_data == PPPOE_TAG_DATA(tag));
+	assert((unsigned char *)ph->tag == (unsigned char *)(ph + 1));
+	assert((unsigned char *)tag->tag_data == (unsigned char *)(tag + 1));
 	return 0;
 }
 CEOF
