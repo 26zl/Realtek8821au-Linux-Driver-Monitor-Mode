@@ -47,10 +47,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # No gcc-10: the runner's kernel headers pass -fzero-call-used-regs, which needs GCC 11+.
         compiler:
           - { cc: gcc-12 }
           - { cc: gcc-11 }
-          - { cc: gcc-10 }
     name: Ubuntu 22.04 ${{ matrix.compiler.cc }}
     steps:
       - uses: actions/checkout@v7
