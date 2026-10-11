@@ -23,7 +23,8 @@ done
 
 DEFAULT_CHANNEL=1
 CHANNEL="${CHANNEL:-$DEFAULT_CHANNEL}"
-if ! [[ "$CHANNEL" =~ ^[0-9]+$ ]] || (( CHANNEL < 1 || CHANNEL > 196 )); then
+# No leading zeros: bash arithmetic would read them as octal.
+if ! [[ "$CHANNEL" =~ ^[1-9][0-9]*$ ]] || (( CHANNEL > 196 )); then
   echo "[monitor_mode] CHANNEL must be a Wi-Fi channel number between 1 and 196." >&2
   exit 1
 fi
@@ -32,7 +33,7 @@ TARGET_IFACE="${TARGET_IFACE:-}"
 
 # Driver name for the udev rule, from dkms.conf; literal fallback if read fails.
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/../dkms.conf" 2>/dev/null)"
+DRV_NAME="$(sed -n 's/^PACKAGE_NAME="\(.*\)"/\1/p' "$SCRIPT_DIR/../dkms.conf" 2>/dev/null || true)"
 DRV_NAME="${DRV_NAME:-rtl8821au}"
 HELPER_PATH="/usr/local/bin/wlan-monitor-8821au.sh"
 UNIT_PATH="/etc/systemd/system/wlan-monitor-8821au.service"
@@ -311,9 +312,9 @@ echo "[monitor_mode] Installing udev rule for hot-plug support..."
 SYSTEMCTL_PATH="$(command -v systemctl)"
 cat > "$UDEV_RULE_PATH" <<EOF
 # Automatically restart the monitor-mode service when the 8821au adapter is plugged in.
-# rtw_8821au is the in-kernel rtw88 driver, which the helper also detects.
+# rtw88_8821au (rtw_8821au before kernel 6.16) is the in-kernel rtw88 driver, which the helper also detects.
 # Managed by monitor-mode.sh - do not edit manually.
-ACTION=="add", SUBSYSTEM=="net", DRIVERS=="${DRV_NAME}|rtw_8821au", RUN+="$SYSTEMCTL_PATH --no-block restart wlan-monitor-8821au.service"
+ACTION=="add", SUBSYSTEM=="net", DRIVERS=="${DRV_NAME}|rtw88_8821au|rtw_8821au", RUN+="$SYSTEMCTL_PATH --no-block restart wlan-monitor-8821au.service"
 EOF
 udevadm control --reload-rules 2>/dev/null || true
 
