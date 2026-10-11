@@ -169,7 +169,7 @@ echo ": ${KVER} (kernel version)"
 
 
 # display version of gcc used to compile the kernel
-gcc_ver_used_to_compile_the_kernel=$(cat /proc/version | sed 's/^.*gcc/gcc/' | sed 's/\s.*$//')
+gcc_ver_used_to_compile_the_kernel=$(sed 's/^.*gcc/gcc/' /proc/version | sed 's/\s.*$//')
 echo ": ""${gcc_ver_used_to_compile_the_kernel} (version of gcc used to compile the kernel)"
 
 
