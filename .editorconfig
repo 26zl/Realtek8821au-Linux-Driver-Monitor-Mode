@@ -1,0 +1,31 @@
+# The driver follows the Linux kernel style used upstream: tabs, 8 columns.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = tab
+indent_size = 8
+
+[*.{c,h}]
+# Upstream sources carry trailing whitespace; trimming it on save would turn
+# every merge from upstream into a conflict.
+trim_trailing_whitespace = false
+
+[*.{yml,yaml,md}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# The scripts this fork adds use spaces; the upstream sh scripts use tabs.
+[tools/{monitor-mode,channel-hop}.sh]
+indent_style = space
+indent_size = 2
+
+[tests/{test-monitor-helper,test-pppoe-accessors}.sh]
+indent_style = space
+indent_size = 4
